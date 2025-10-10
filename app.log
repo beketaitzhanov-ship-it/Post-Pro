@@ -1,0 +1,42 @@
+2025-10-10 12:37:48,512 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-10-10 12:37:48,513 - INFO - [33mPress CTRL+C to quit[0m
+2025-10-10 12:37:48,514 - INFO -  * Restarting with stat
+2025-10-10 12:37:49,952 - WARNING -  * Debugger is active!
+2025-10-10 12:37:49,955 - INFO -  * Debugger PIN: 444-582-018
+2025-10-10 12:38:53,309 - INFO - 127.0.0.1 - - [10/Oct/2025 12:38:53] "GET / HTTP/1.1" 200 -
+2025-10-10 12:39:00,648 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 12:39:00,659 - INFO - 127.0.0.1 - - [10/Oct/2025 12:39:00] "POST /chat HTTP/1.1" 200 -
+2025-10-10 12:39:07,593 - INFO - 127.0.0.1 - - [10/Oct/2025 12:39:07] "POST /chat HTTP/1.1" 200 -
+2025-10-10 12:39:11,239 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 12:39:11,240 - INFO - 127.0.0.1 - - [10/Oct/2025 12:39:11] "POST /chat HTTP/1.1" 200 -
+2025-10-10 12:39:19,021 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 12:39:19,022 - INFO - 127.0.0.1 - - [10/Oct/2025 12:39:19] "POST /chat HTTP/1.1" 200 -
+2025-10-10 12:52:20,545 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-10-10 12:52:20,545 - INFO - [33mPress CTRL+C to quit[0m
+2025-10-10 12:52:20,546 - INFO -  * Restarting with stat
+2025-10-10 12:52:22,304 - WARNING -  * Debugger is active!
+2025-10-10 12:52:22,309 - INFO -  * Debugger PIN: 444-582-018
+2025-10-10 12:55:02,215 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-10-10 12:55:02,216 - INFO - [33mPress CTRL+C to quit[0m
+2025-10-10 12:55:02,217 - INFO -  * Restarting with stat
+2025-10-10 12:55:03,541 - WARNING -  * Debugger is active!
+2025-10-10 12:55:03,544 - INFO -  * Debugger PIN: 444-582-018
+2025-10-10 12:55:57,769 - INFO - 127.0.0.1 - - [10/Oct/2025 12:55:57] "GET / HTTP/1.1" 200 -
+2025-10-10 12:56:02,362 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 12:56:02,363 - INFO - 127.0.0.1 - - [10/Oct/2025 12:56:02] "POST /chat HTTP/1.1" 200 -
+2025-10-10 12:56:08,100 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 12:56:08,101 - INFO - 127.0.0.1 - - [10/Oct/2025 12:56:08] "POST /chat HTTP/1.1" 200 -
+2025-10-10 13:02:05,429 - INFO - 127.0.0.1 - - [10/Oct/2025 13:02:05] "POST /chat HTTP/1.1" 200 -
+2025-10-10 13:02:08,809 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 13:02:08,810 - INFO - 127.0.0.1 - - [10/Oct/2025 13:02:08] "POST /chat HTTP/1.1" 200 -
+2025-10-10 13:02:12,398 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 13:02:12,399 - INFO - 127.0.0.1 - - [10/Oct/2025 13:02:12] "POST /chat HTTP/1.1" 200 -
+2025-10-10 13:02:18,526 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 13:02:18,527 - INFO - 127.0.0.1 - - [10/Oct/2025 13:02:18] "POST /chat HTTP/1.1" 200 -
+2025-10-10 13:02:25,091 - ERROR - Œÿ»¡ ¿ API œ–» √≈Õ≈–¿÷»» Œ“¬≈“¿: 404 models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+2025-10-10 13:02:25,092 - INFO - 127.0.0.1 - - [10/Oct/2025 13:02:25] "POST /chat HTTP/1.1" 200 -
+2025-10-10 13:03:20,793 - INFO -  * Detected change in 'C:\\Users\\brono\\Music\\PostProbot\\app.py', reloading
+2025-10-10 13:03:23,207 - INFO -  * Restarting with stat
