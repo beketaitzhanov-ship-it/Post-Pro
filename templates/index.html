@@ -13,224 +13,184 @@
 
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
-        .app-header {
-            background: #ffffff;
-            padding: 20px 25px;
-            border-radius: 12px;
-            border: 1px solid #e1e5e9;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            margin-bottom: 20px;
+        .chat-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 400px;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: #2d3748;
+            color: white;
+            padding: 20px;
+            text-align: center;
         }
 
         .header-content {
             display: flex;
             align-items: center;
-            gap: 18px;
+            justify-content: center;
+            gap: 15px;
         }
 
         .header-logo {
-            height: 55px;
+            height: 40px;
             width: auto;
         }
 
-        .header-text {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .main-title {
-            color: #2d3748;
+        .header-text h1 {
+            font-size: 20px;
             margin: 0;
-            font-size: 26px;
-            font-weight: 700;
         }
 
-        .tagline {
-            color: #718096;
-            margin: 4px 0 0 0;
-            font-size: 15px;
-            font-weight: 400;
-            font-style: italic;
+        .header-text p {
+            font-size: 12px;
+            opacity: 0.8;
+            margin: 2px 0 0 0;
         }
 
-        .calculator-container {
-            background: #ffffff;
-            padding: 30px;
-            border-radius: 12px;
-            border: 1px solid #e1e5e9;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            max-width: 500px;
-            margin: 0 auto;
+        .chat-messages {
+            padding: 20px;
+            height: 300px;
+            overflow-y: auto;
+            background: #f7fafc;
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #2d3748;
-            font-weight: 600;
-        }
-
-        input, select {
-            width: 100%;
+        .message {
+            margin-bottom: 15px;
             padding: 12px;
-            border: 1px solid #e1e5e9;
-            border-radius: 6px;
-            font-size: 16px;
-            transition: border-color 0.3s ease;
+            border-radius: 10px;
+            max-width: 80%;
         }
 
-        input:focus, select:focus {
+        .bot-message {
+            background: #e2e8f0;
+            color: #2d3748;
+            margin-right: auto;
+        }
+
+        .user-message {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .chat-input {
+            padding: 15px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        #userInput {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 25px;
             outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            font-size: 14px;
         }
 
-        .calculate-btn {
-            width: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        #sendButton {
+            background: #667eea;
             color: white;
             border: none;
-            padding: 14px;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
+            border-radius: 25px;
+            padding: 12px 20px;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            font-size: 14px;
+            transition: background 0.3s ease;
         }
 
-        .calculate-btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .result {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f7fafc;
-            border-radius: 6px;
-            border-left: 4px solid #667eea;
-            display: none;
-        }
-
-        @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                text-align: center;
-                gap: 12px;
-            }
-            
-            .header-logo {
-                height: 50px;
-            }
-            
-            .main-title {
-                font-size: 22px;
-            }
-            
-            .tagline {
-                font-size: 14px;
-            }
-
-            .calculator-container {
-                padding: 20px;
-                margin: 0 10px;
-            }
+        #sendButton:hover {
+            background: #5a6fd8;
         }
     </style>
 </head>
 <body>
-    <div class="app-header">
-        <div class="header-content">
-            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Post Pro Logo" class="header-logo">
-            <div class="header-text">
-                <h1 class="main-title">POST PRO Assistant</h1>
-                <p class="tagline">AI-powered delivery calculator</p>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="header-content">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Post Pro Logo" class="header-logo">
+                <div class="header-text">
+                    <h1>POST PRO Assistant</h1>
+                    <p>AI-powered delivery calculator</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot-message">
+                Привет! Я помогу рассчитать стоимость доставки. Отправьте мне расстояние и вес посылки.
+            </div>
+        </div>
+
+        <div class="chat-input">
+            <div class="input-group">
+                <input type="text" id="userInput" placeholder="Введите ваше сообщение...">
+                <button id="sendButton">Отправить</button>
             </div>
         </div>
     </div>
 
-    <div class="calculator-container">
-        <div class="form-group">
-            <label for="distance">Расстояние (км):</label>
-            <input type="number" id="distance" placeholder="Введите расстояние">
-        </div>
-
-        <div class="form-group">
-            <label for="weight">Вес посылки (кг):</label>
-            <input type="number" id="weight" placeholder="Введите вес">
-        </div>
-
-        <div class="form-group">
-            <label for="service">Тип доставки:</label>
-            <select id="service">
-                <option value="standard">Стандартная</option>
-                <option value="express">Экспресс</option>
-                <option value="overnight">Срочная</option>
-            </select>
-        </div>
-
-        <button class="calculate-btn" onclick="calculateDelivery()">Рассчитать стоимость</button>
-
-        <div class="result" id="result">
-            <strong>Результат расчета:</strong>
-            <div id="resultText"></div>
-        </div>
-    </div>
-
     <script>
-        function calculateDelivery() {
-            const distance = parseFloat(document.getElementById('distance').value);
-            const weight = parseFloat(document.getElementById('weight').value);
-            const service = document.getElementById('service').value;
-            
-            if (!distance || !weight) {
-                alert('Пожалуйста, заполните все поля');
-                return;
-            }
+        const chatMessages = document.getElementById('chatMessages');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
 
-            // Базовая логика расчета (можно изменить)
-            let basePrice = distance * 10 + weight * 5;
-            let multiplier = 1;
-
-            switch(service) {
-                case 'express':
-                    multiplier = 1.5;
-                    break;
-                case 'overnight':
-                    multiplier = 2.0;
-                    break;
-            }
-
-            const totalPrice = basePrice * multiplier;
-
-            document.getElementById('resultText').innerHTML = `
-                Стоимость доставки: <strong>${totalPrice.toFixed(2)} руб.</strong><br>
-                Срок доставки: ${getDeliveryTime(distance, service)}
-            `;
-            
-            document.getElementById('result').style.display = 'block';
+        function addMessage(text, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            messageDiv.textContent = text;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
         }
 
-        function getDeliveryTime(distance, service) {
-            switch(service) {
-                case 'standard':
-                    return Math.ceil(distance / 100) + ' дней';
-                case 'express':
-                    return Math.ceil(distance / 200) + ' дней';
-                case 'overnight':
-                    return '1 день';
-                default:
-                    return 'расчитывается';
-            }
+        function handleUserInput() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            addMessage(text, true);
+            userInput.value = '';
+
+            // Имитация ответа бота
+            setTimeout(() => {
+                let response = '';
+                
+                if (text.includes('привет') || text.includes('здравств')) {
+                    response = 'Привет! Чем могу помочь с доставкой?';
+                } else if (text.includes('доставк') || text.includes('стоимос') || text.includes('расчет')) {
+                    response = 'Для расчета стоимости доставки укажите:\n- Расстояние в км\n- Вес посылки в кг\n- Тип доставки (стандартная/экспресс)';
+                } else if (text.match(/\d/)) {
+                    response = 'Понял ваши данные! Рассчитываю стоимость доставки...';
+                } else {
+                    response = 'Я помогу с расчетом доставки. Укажите параметры посылки.';
+                }
+                
+                addMessage(response);
+            }, 1000);
         }
+
+        sendButton.addEventListener('click', handleUserInput);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleUserInput();
+        });
     </script>
 </body>
 </html>
