@@ -56,15 +56,17 @@
         .logo {
             width: 40px;
             height: 40px;
-            background: white;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #90CC66;
-            font-weight: bold;
-            font-size: 18px;
-            font-family: 'Google Sans', sans-serif;
+            overflow: hidden;
+        }
+        
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
         
         .header-text h1 {
@@ -227,7 +229,6 @@
             .logo {
                 width: 36px;
                 height: 36px;
-                font-size: 16px;
             }
             
             .header-text h1 {
@@ -274,7 +275,6 @@
             .logo {
                 width: 32px;
                 height: 32px;
-                font-size: 14px;
             }
             
             .header-text h1 {
@@ -323,7 +323,9 @@
     <div class="chat-container">
         <div class="header">
             <div class="logo-section">
-                <div class="logo">PP</div>
+                <div class="logo">
+                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Post Pro Logo" onerror="this.style.display='none'; this.parentNode.innerHTML='PP'; this.parentNode.style.background='white'; this.parentNode.style.color='#90CC66'; this.parentNode.style.fontWeight='bold'; this.parentNode.style.fontSize='18px';">
+                </div>
                 <div class="header-text">
                     <h1>POST PRO Assistant</h1>
                     <div class="subtitle">AI-powered delivery calculator</div>
