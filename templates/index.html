@@ -42,6 +42,8 @@
             border-bottom: 1px solid #e8eaed;
             background: white;
             border-radius: 16px 16px 0 0;
+            background: linear-gradient(135deg, #90CC66, #7BBF50);
+            color: white;
         }
         
         .logo-section {
@@ -54,12 +56,12 @@
         .logo {
             width: 40px;
             height: 40px;
-            background: linear-gradient(135deg, #90CC66, #7BBF50);
+            background: white;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
+            color: #90CC66;
             font-weight: bold;
             font-size: 18px;
             font-family: 'Google Sans', sans-serif;
@@ -68,13 +70,13 @@
         .header-text h1 {
             font-size: 1.5rem;
             font-weight: 500;
-            color: #3c4043;
+            color: white;
             line-height: 1.3;
         }
         
         .header-text .subtitle {
             font-size: 0.875rem;
-            color: #5f6368;
+            color: rgba(255, 255, 255, 0.9);
             margin-top: 2px;
         }
         
@@ -109,6 +111,7 @@
             margin-left: auto;
             border-bottom-right-radius: 6px;
             align-self: flex-end;
+            box-shadow: 0 2px 8px rgba(144, 204, 102, 0.3);
         }
         
         .bot-message {
@@ -117,7 +120,7 @@
             border: 1px solid #e8eaed;
             border-bottom-left-radius: 6px;
             align-self: flex-start;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
         
         .input-area {
@@ -169,11 +172,14 @@
         #send-button:hover:not(:disabled) {
             background: #7BBF50;
             transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(144, 204, 102, 0.3);
         }
         
         #send-button:disabled {
             background: #cccccc;
             cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
         
         .typing-indicator {
@@ -255,6 +261,62 @@
                 min-width: 70px;
             }
         }
+        
+        @media (max-width: 480px) {
+            .header {
+                padding: 12px 16px;
+            }
+            
+            .logo-section {
+                gap: 10px;
+            }
+            
+            .logo {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            
+            .header-text h1 {
+                font-size: 1.2rem;
+            }
+            
+            .header-text .subtitle {
+                font-size: 0.8rem;
+            }
+            
+            .chat-messages {
+                padding: 12px;
+            }
+            
+            .message {
+                max-width: 95%;
+                padding: 12px 16px;
+            }
+            
+            .input-area {
+                padding: 12px;
+            }
+        }
+        
+        /* Стили для скроллбара */
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 10px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
     </style>
 </head>
 <body>
@@ -272,14 +334,19 @@
         <div class="chat-messages" id="chat-messages">
             <div class="message bot-message">
                 <div class="message-content">
-                    Привет! 👋 Я ваш ИИ-помощник Post Pro. Готов рассчитать стоимость доставки из Китая в Казахстан и помочь с заявкой!
+                    Привет! 👋 Я ваш ИИ-помощник Post Pro. 
 
-Просто напишите:
-• Вес груза
-• Тип товара  
-• Город доставки
+🚚 **Рассчитаю доставку из Китая в Казахстан:**
 
-И я сразу покажу расчет! 🚀
+• **Т1:** Доставка до Алматы (склады: ИУ/Гуанчжоу)
+• **Т2:** Доставка до двери по Казахстану
+
+💡 **Просто напишите:**
+- Вес груза
+- Тип товара  
+- Город доставки
+
+И я сразу покажу расчет! ✨
                 </div>
             </div>
         </div>
@@ -381,7 +448,7 @@
                 
             } catch (error) {
                 hideTypingIndicator();
-                addMessage('Извините, произошла ошибка при отправке сообщения. Пожалуйста, попробуйте еще раз.', false);
+                addMessage('Извините, произошла ошибка при отправке сообщения. Попробуйте снова.', false);
                 console.error('Ошибка:', error);
             } finally {
                 sendButton.disabled = false;
