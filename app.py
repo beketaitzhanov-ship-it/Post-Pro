@@ -338,31 +338,36 @@ def chat():
             if not delivery_data['product_type']:
                 delivery_data['product_type'] = "общие товары"
             
-            # Быстрый расчет
-            quick_cost = calculate_quick_cost(
-                delivery_data['weight'], 
-                delivery_data['product_type'], 
-                delivery_data['city']
-            )
-            
-            if quick_cost:
-                quick_response = (
-                    f"🚚 **Быстрый расчет:**\n"
-                    f"• {delivery_data['weight']} кг «{delivery_data['product_type']}» в {delivery_data['city'].capitalize()}\n"
-                    f"• 💰 Примерная стоимость: **~{quick_cost['total']:.0f} тенге**\n\n"
-                    f"📊 Хотите детальный расчет с разбивкой по тарифам?"
-                )
-                
-                # Проверяем, не запрашивал ли уже клиент детальный расчет
-                if any(word in user_message.lower() for word in ['детальн', 'подробн', 'разбей', 'тариф']):
-                    detailed_response = calculate_detailed_cost(
-                        delivery_data['weight'], 
-                        delivery_data['product_type'], 
-                        delivery_data['city']
-                    )
-                    session['delivery_data'] = delivery_data
-                    session['chat_history'] = chat_history
-                    return jsonify({"response": detailed_response})
+           # Быстрый расчет
+quick_cost = calculate_quick_cost(
+    delivery_data['weight'], 
+    delivery_data['product_type'], 
+    delivery_data['city']
+)
+
+if quick_cost:
+    # ПРОВЕРЯЕМ ДЕТАЛЬНЫЙ РАСЧЕТ В ОТДЕЛЬНОМ УСЛОВИИ
+    if any(word in user_message.lower() for word in ['детальн', 'подробн', 'разбей', 'тариф', 'да']):
+        detailed_response = calculate_detailed_cost(
+            delivery_data['weight'], 
+            delivery_data['product_type'], 
+            delivery_data['city']
+        )
+        session['delivery_data'] = delivery_data
+        session['chat_history'] = chat_history
+        return jsonify({"response": detailed_response})
+    
+    # ЕСЛИ НЕ ДЕТАЛЬНЫЙ - ПОКАЗЫВАЕМ БЫСТРЫЙ
+    quick_response = (
+        f"🚚 **Быстрый расчет:**\n"
+        f"• {delivery_data['weight']} кг «{delivery_data['product_type']}» в {delivery_data['city'].capitalize()}\n"
+        f"• 💰 Примерная стоимость: **~{quick_cost['total']:.0f} тенге**\n\n"
+        f"📊 Хотите детальный расчет с разбивкой по тарифам?"
+    )
+    
+    session['delivery_data'] = delivery_data
+    session['chat_history'] = chat_history
+    return jsonify({"response": quick_response})
                 else:
                     session['delivery_data'] = delivery_data
                     session['chat_history'] = chat_history
@@ -412,3 +417,4 @@ def health_check():
 if __name__ == '__main__':
     print("🎉 Бот запущен!")
     app.run(debug=False, host='0.0.0.0', port=5000)
+
