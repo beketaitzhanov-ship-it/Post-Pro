@@ -73,7 +73,11 @@ SYSTEM_INSTRUCTION = """
    - Когда клиент пишет имя и телефон - сохраняй заявку
    - Формат: [ЗАЯВКА] Имя: [имя], Телефон: [телефон]
 
-5. **НЕ УПОМИНАЙ:** другие города Китая кроме ИУ и Гуанчжоу
+5. **ОБЩИЕ ВОПРОСЫ:**
+   - Если вопрос не о доставке (погода, имя бота и т.д.) - отвечай нормально
+   - Не зацикливайся только на доставке
+
+6. **НЕ УПОМИНАЙ:** другие города Китая кроме ИУ и Гуанчжоу
 
 Всегда будь дружелюбным и профессиональным! 😊
 """
@@ -239,23 +243,46 @@ def extract_delivery_info(text):
         return None, None, None
 
 def extract_contact_info(text):
-    """Извлечение контактных данных"""
+    """Умное извлечение контактных данных"""
     name = None
     phone = None
     
-    # Поиск телефона
-    phone_match = re.search(r'[\+]?[7|8]?[\s]?[\(]?(\d{3})[\)]?[\s]?(\d{3})[\s]?[\-]?(\d{2})[\s]?[\-]?(\d{2})', text)
-    if phone_match:
-        phone = re.sub(r'\D', '', text)
-        if phone.startswith('8'):
-            phone = '7' + phone[1:]
-        elif not phone.startswith('7'):
-            phone = '7' + phone
+    # Удаляем лишние пробелы и приводим к нижнему регистру
+    clean_text = re.sub(r'\s+', ' ', text.strip()).lower()
     
-    # Поиск имени (первое слово из 2+ букв)
-    name_match = re.search(r'\b([А-Яа-яA-Za-z]{2,})\b', text)
+    # Поиск имени (первое слово из 2+ русских/английских букв)
+    name_match = re.search(r'^([а-яa-z]{2,})', clean_text)
     if name_match:
         name = name_match.group(1).capitalize()
+    
+    # Поиск телефона (разные форматы)
+    phone_patterns = [
+        r'(\d{10,11})',  # 87057600909
+        r'(\d{3}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})',  # 870 576 00 909
+        r'(\d{3}[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{3})',  # 870 57 600 909
+    ]
+    
+    for pattern in phone_patterns:
+        phone_match = re.search(pattern, clean_text)
+        if phone_match:
+            phone = re.sub(r'\D', '', phone_match.group(1))
+            # Нормализация номера
+            if phone.startswith('8'):
+                phone = '7' + phone[1:]
+            elif len(phone) == 10:
+                phone = '7' + phone
+            break
+    
+    # Если нашли и имя и телефон - возвращаем
+    if name and phone and len(phone) >= 10:
+        return name, phone
+    
+    # Если есть только телефон, пробуем найти имя в тексте
+    if phone and not name:
+        # Ищем имя перед запятой или в начале текста
+        name_before_comma = re.search(r'^([а-яa-z]+)\s*[,]', clean_text)
+        if name_before_comma:
+            name = name_before_comma.group(1).capitalize()
     
     return name, phone
 
@@ -296,20 +323,30 @@ def chat():
         # Если ждем контакты
         if waiting_for_contacts:
             name, phone = extract_contact_info(user_message)
+            
             if name and phone:
+                # Формируем детали заявки
                 details = f"Имя: {name}, Телефон: {phone}"
-                if delivery_data['weight'] and delivery_data['city']:
-                    details += f", Вес: {delivery_data['weight']} кг, Товар: {delivery_data.get('product_type', 'общие товары')}, Город: {delivery_data['city']}"
+                if delivery_data['weight']:
+                    details += f", Вес: {delivery_data['weight']} кг"
+                if delivery_data['product_type']:
+                    details += f", Товар: {delivery_data['product_type']}"
+                if delivery_data['city']:
+                    details += f", Город: {delivery_data['city']}"
                 
                 save_application(details)
+                
+                # Очищаем сессию
                 session.update({
                     'delivery_data': {'weight': None, 'product_type': None, 'city': None},
                     'chat_history': [],
                     'waiting_for_contacts': False
                 })
+                
                 return jsonify({"response": "🎉 Спасибо, что выбрали Post Pro! Менеджер свяжется с вами в течение 15 минут. 📞"})
             else:
-                return jsonify({"response": "Пожалуйста, укажите имя и телефон. Например: 'Аслан, 87001234567'"})
+                # Если не распознали - уточняем
+                return jsonify({"response": "Не удалось распознать контакты. Пожалуйста, укажите в формате: 'Имя, 87001234567'"})
         
         # Запросы о заявке
         if any(word in user_message.lower() for word in ['заявк', 'оставь', 'свяж', 'контакт', 'позвон', 'менеджер']):
@@ -333,45 +370,50 @@ def chat():
         if city:
             delivery_data['city'] = city
         
-        # Если есть все данные для расчета
-        if delivery_data['weight'] and delivery_data['city']:
+        # ПРОВЕРЯЕМ - ЕСЛИ ВОПРОС НЕ О ДОСТАВКЕ, ТО ПЕРЕДАЕМ В GEMINI
+        is_delivery_question = any(word in user_message.lower() for word in [
+            'вес', 'кг', 'город', 'доставк', 'тариф', 'стоимос', 'расчет', 'цена',
+            'сколько', 'стоит', 'посчитай', 'рассчитай', 'т1', 'т2', 'да', 'yes'
+        ])
+
+        # Если есть данные о доставке И вопрос о доставке - показываем расчет
+        if delivery_data['weight'] and delivery_data['city'] and is_delivery_question:
             if not delivery_data['product_type']:
                 delivery_data['product_type'] = "общие товары"
             
-           # Быстрый расчет
-quick_cost = calculate_quick_cost(
-    delivery_data['weight'], 
-    delivery_data['product_type'], 
-    delivery_data['city']
-)
-
-if quick_cost:
-    # ПРОВЕРЯЕМ ДЕТАЛЬНЫЙ РАСЧЕТ В ОТДЕЛЬНОМ УСЛОВИИ
-    if any(word in user_message.lower() for word in ['детальн', 'подробн', 'разбей', 'тариф', 'да']):
-        detailed_response = calculate_detailed_cost(
-            delivery_data['weight'], 
-            delivery_data['product_type'], 
-            delivery_data['city']
-        )
-        session['delivery_data'] = delivery_data
-        session['chat_history'] = chat_history
-        return jsonify({"response": detailed_response})
-    
-    # ЕСЛИ НЕ ДЕТАЛЬНЫЙ - ПОКАЗЫВАЕМ БЫСТРЫЙ
-    quick_response = (
-        f"🚚 **Быстрый расчет:**\n"
-        f"• {delivery_data['weight']} кг «{delivery_data['product_type']}» в {delivery_data['city'].capitalize()}\n"
-        f"• 💰 Примерная стоимость: **~{quick_cost['total']:.0f} тенге**\n\n"
-        f"📊 Хотите детальный расчет с разбивкой по тарифам?"
-    )
-    
-    session['delivery_data'] = delivery_data
-    session['chat_history'] = chat_history
-    return jsonify({"response": quick_response})
-                else:
-                    session['delivery_data'] = delivery_data
-                    session['chat_history'] = chat_history
-                    return jsonify({"response": quick_response})
+            # СНАЧАЛА проверяем запрос на детальный расчет
+            wants_detailed = any(word in user_message.lower() for word in [
+                'детальн', 'подробн', 'разбей', 'тариф', 'да', 'yes', 'конечно'
+            ])
+            
+            if wants_detailed:
+                detailed_response = calculate_detailed_cost(
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city']
+                )
+                session['delivery_data'] = delivery_data
+                session['chat_history'] = chat_history
+                return jsonify({"response": detailed_response})
+            
+            # Если не детальный - показываем быстрый расчет
+            quick_cost = calculate_quick_cost(
+                delivery_data['weight'], 
+                delivery_data['product_type'], 
+                delivery_data['city']
+            )
+            
+            if quick_cost:
+                quick_response = (
+                    f"🚚 **Быстрый расчет:**\n"
+                    f"• {delivery_data['weight']} кг «{delivery_data['product_type']}» в {delivery_data['city'].capitalize()}\n"
+                    f"• 💰 Примерная стоимость: **~{quick_cost['total']:.0f} тенге**\n\n"
+                    f"📊 Хотите детальный расчет с разбивкой по тарифам?"
+                )
+                
+                session['delivery_data'] = delivery_data
+                session['chat_history'] = chat_history
+                return jsonify({"response": quick_response})
         
         # Контекст для ИИ
         context_lines = []
@@ -417,4 +459,3 @@ def health_check():
 if __name__ == '__main__':
     print("🎉 Бот запущен!")
     app.run(debug=False, host='0.0.0.0', port=5000)
-
