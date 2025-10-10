@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PostPro ИИ Ассистент</title>
+    <style>
+        body { font-family: 'Cambria', Georgia, serif; margin: 0; padding: 20px; background-color: #f0f4f8; display: flex; justify-content: center; align-items: center; min-height: 100vh;}
+        #chat-container { width: 100%; max-width: 650px; background-color: white; border-radius: 12px; box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1); padding: 25px; display: flex; flex-direction: column; max-height: 90vh; }
+        h2 { color: #1a202c; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-bottom: 25px; font-size: 1.6rem; font-weight: 700; }
+        #chat-output { flex-grow: 1; overflow-y: auto; background-color: #f7fafc; padding: 15px; margin-bottom: 20px; border-radius: 8px; max-height: 400px; display: flex; flex-direction: column; }
+        #chat-input-container { display: flex; width: 100%; }
+        #chat-input { flex-grow: 1; padding: 14px 16px; font-size: 1rem; border: 1px solid #e2e8f0; border-radius: 6px 0 0 6px; outline: none; }
+        #send-button { padding: 14px 25px; font-size: 1rem; background-color: #3b82f6; color: white; border: none; cursor: pointer; border-radius: 0 6px 6px 0; }
+        .message { margin: 8px 0; padding: 10px 15px; border-radius: 8px; max-width: 90%; line-height: 1.5; white-space: pre-wrap; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .user { background-color: #e9f0ff; color: #1e40af; margin-left: auto; align-self: flex-end; }
+        .bot { background-color: #ffffff; color: #1a202c; border: 1px solid #e2e8f0; align-self: flex-start; border-left: 4px solid #3b82f6; }
+
+        @media (max-width: 600px) {
+            #chat-container { padding: 15px; max-height: 80vh; }
+            #chat-input { font-size: 0.9rem; padding: 10px; }
+            #send-button { padding: 10px 15px; font-size: 0.9rem; }
+            h2 { font-size: 1.3rem; }
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h2>PostPro ИИ Ассистент (Gemini) ✨</h2>
+        <div id="chat-output">
+            <div class="message bot">Сәлем! Я ваш новый ИИ-ассистент. Рассчитаю доставку из Китая в Казахстан и помогу оформить заявку. Спрашивайте!</div>
+        </div>
+        <div id="chat-input-container">
+            <input type="text" id="chat-input" placeholder="Например, '50 кг косметики в Караганду'" aria-label="Поле ввода сообщения" autofocus>
+            <button id="send-button" aria-label="Отправить сообщение">Отправить</button>
+        </div>
+    </div>
+    <script>
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        const chatOutput = document.getElementById('chat-output');
+
+        async function sendMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            addMessage('Вы', message, 'user');
+            chatInput.value = '';
+            
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({message: message})
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ошибка: ${response.status}`);
+                }
+                const data = await response.json();
+                addMessage('Ассистент', data.response, 'bot');
+            } catch (error) {
+                addMessage('Ошибка', `Не удалось связаться с сервером: ${error.message}. Попробуйте снова.`, 'bot');
+            }
+        }
+
+        function addMessage(sender, text, type) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message', type);
+            messageElement.innerText = `${sender}: ${text}`;
+            chatOutput.appendChild(messageElement);
+            chatOutput.scrollTop = chatOutput.scrollHeight;
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
