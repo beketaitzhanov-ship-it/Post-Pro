@@ -42,31 +42,34 @@
             border-bottom: 1px solid #e8eaed;
             background: white;
             border-radius: 16px 16px 0 0;
-            background: linear-gradient(135deg, #90CC66, #7BBF50);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
         
         .logo-section {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 16px;
             margin-bottom: 8px;
         }
         
         .logo {
-            width: 40px;
-            height: 40px;
+            width: 50px;
+            height: 50px;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px;
         }
         
         .logo img {
             width: 100%;
             height: 100%;
             object-fit: contain;
+            border-radius: 8px;
         }
         
         .header-text h1 {
@@ -108,12 +111,12 @@
         }
         
         .user-message {
-            background: #90CC66;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             margin-left: auto;
             border-bottom-right-radius: 6px;
             align-self: flex-end;
-            box-shadow: 0 2px 8px rgba(144, 204, 102, 0.3);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
         }
         
         .bot-message {
@@ -154,12 +157,12 @@
         }
         
         #message-input:focus {
-            border-color: #90CC66;
+            border-color: #667eea;
         }
         
         #send-button {
             padding: 16px 24px;
-            background: #90CC66;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
             border-radius: 24px;
@@ -172,9 +175,8 @@
         }
         
         #send-button:hover:not(:disabled) {
-            background: #7BBF50;
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(144, 204, 102, 0.3);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
         }
         
         #send-button:disabled {
@@ -227,8 +229,8 @@
             }
             
             .logo {
-                width: 36px;
-                height: 36px;
+                width: 44px;
+                height: 44px;
             }
             
             .header-text h1 {
@@ -269,12 +271,12 @@
             }
             
             .logo-section {
-                gap: 10px;
+                gap: 12px;
             }
             
             .logo {
-                width: 32px;
-                height: 32px;
+                width: 40px;
+                height: 40px;
             }
             
             .header-text h1 {
@@ -324,7 +326,7 @@
         <div class="header">
             <div class="logo-section">
                 <div class="logo">
-                    <img src="{{ url_for('static', filename='logo.png') }}" alt="Post Pro Logo" onerror="this.style.display='none'; this.parentNode.innerHTML='PP'; this.parentNode.style.background='white'; this.parentNode.style.color='#90CC66'; this.parentNode.style.fontWeight='bold'; this.parentNode.style.fontSize='18px';">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Post Pro Logo">
                 </div>
                 <div class="header-text">
                     <h1>POST PRO Assistant</h1>
