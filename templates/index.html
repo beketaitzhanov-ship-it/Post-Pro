@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>POST PRO Assistant</title>
+    <title>Post Pro Assistant</title>
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
     <style>
         * {
@@ -14,75 +14,113 @@
         
         body {
             font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #f8f9fa;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            background: #FFFFFF;
+            color: #1F1F1F;
             min-height: 100vh;
-            color: #3c4043;
-        }
-        
-        .chat-container {
-            width: 100%;
-            max-width: 900px;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
             display: flex;
             flex-direction: column;
-            height: 95vh;
-            max-height: 95vh;
-            margin: 10px;
         }
         
+        /* Header - улучшенный */
         .header {
-            padding: 20px 24px;
-            border-bottom: 1px solid #e8eaed;
-            background: white;
-            border-radius: 16px 16px 0 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .logo-section {
+            padding: 20px;
             display: flex;
             align-items: center;
-            gap: 16px;
-            margin-bottom: 8px;
+            border-bottom: 1px solid #f0f0f0;
+            background: white;
         }
         
         .logo {
-            width: 50px;
-            height: 50px;
-            border-radius: 12px;
+            width: 32px;
+            height: 32px;
+            margin-right: 12px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 4px;
         }
         
         .logo img {
             width: 100%;
             height: 100%;
             object-fit: contain;
-            border-radius: 8px;
         }
         
-        .header-text h1 {
-            font-size: 1.5rem;
+        .app-name {
+            font-size: 20px;
             font-weight: 500;
-            color: white;
-            line-height: 1.3;
+            color: #1F1F1F;
         }
         
-        .header-text .subtitle {
-            font-size: 0.875rem;
-            color: rgba(255, 255, 255, 0.9);
-            margin-top: 2px;
+        /* Welcome Screen - новый дизайн */
+        .welcome-screen {
+            flex: 1;
+            padding: 40px 20px 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .greeting {
+            font-size: 32px;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 16px;
+            max-width: 300px;
+        }
+        
+        .assistant-role {
+            font-size: 22px;
+            font-weight: 400;
+            line-height: 1.4;
+            color: #1F1F1F;
+            margin-bottom: 40px;
+            max-width: 280px;
+        }
+        
+        .examples {
+            width: 100%;
+            max-width: 320px;
+            margin-bottom: 40px;
+        }
+        
+        .example-item {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .example-item:hover {
+            background: #f0f4ff;
+            border-color: #4A80F5;
+        }
+        
+        .example-text {
+            font-size: 16px;
+            color: #1F1F1F;
+            line-height: 1.4;
+        }
+        
+        .hint {
+            font-size: 18px;
+            color: #666;
+            max-width: 280px;
+        }
+        
+        /* Chat Interface - улучшенный */
+        .chat-interface {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            height: calc(100vh - 140px);
         }
         
         .chat-messages {
@@ -105,18 +143,12 @@
             font-size: 15px;
         }
         
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
         .user-message {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             margin-left: auto;
             border-bottom-right-radius: 6px;
             align-self: flex-end;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
         }
         
         .bot-message {
@@ -125,30 +157,32 @@
             border: 1px solid #e8eaed;
             border-bottom-left-radius: 6px;
             align-self: flex-start;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
         
+        /* Input Area - улучшенный */
         .input-area {
-            padding: 20px;
-            border-top: 1px solid #e8eaed;
-            background: white;
-            border-radius: 0 0 16px 16px;
+            background: #FFFFFF;
+            padding: 16px 20px;
+            border-top: 1px solid #e0e0e0;
         }
         
         .input-container {
             display: flex;
+            align-items: center;
             gap: 12px;
-            align-items: flex-end;
+            max-width: 600px;
+            margin: 0 auto;
         }
         
         #message-input {
-            flex-grow: 1;
+            flex: 1;
             padding: 16px 20px;
-            border: 2px solid #e8eaed;
-            border-radius: 24px;
+            border: 1px solid #E0E0E0;
+            border-radius: 25px;
             font-size: 16px;
             font-family: 'Google Sans', sans-serif;
             outline: none;
+            background: #f8f9fa;
             resize: none;
             min-height: 56px;
             max-height: 120px;
@@ -157,15 +191,20 @@
         }
         
         #message-input:focus {
-            border-color: #667eea;
+            border-color: #4A80F5;
+            background: #FFFFFF;
+        }
+        
+        #message-input::placeholder {
+            color: #A0A0A0;
         }
         
         #send-button {
             padding: 16px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #4A80F5;
             color: white;
             border: none;
-            border-radius: 24px;
+            border-radius: 25px;
             font-size: 16px;
             font-weight: 500;
             cursor: pointer;
@@ -175,15 +214,20 @@
         }
         
         #send-button:hover:not(:disabled) {
+            background: #3a70e5;
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
         }
         
         #send-button:disabled {
             background: #cccccc;
             cursor: not-allowed;
             transform: none;
-            box-shadow: none;
+        }
+        
+        /* Анимации */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .typing-indicator {
@@ -201,165 +245,73 @@
             animation: typing 1.4s infinite ease-in-out;
         }
         
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-        .typing-dot:nth-child(3) { animation-delay: 0s; }
-        
         @keyframes typing {
             0%, 60%, 100% { transform: scale(0.8); opacity: 0.5; }
             30% { transform: scale(1); opacity: 1; }
         }
         
-        .message-content {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        
-        /* Мобильная адаптация */
+        /* Адаптивность */
         @media (max-width: 768px) {
-            .chat-container {
-                height: 100vh;
-                max-height: 100vh;
-                margin: 0;
-                border-radius: 0;
+            .welcome-screen {
+                padding: 30px 20px 100px;
             }
             
-            .header {
-                padding: 16px 20px;
+            .greeting {
+                font-size: 28px;
             }
             
-            .logo {
-                width: 44px;
-                height: 44px;
+            .assistant-role,
+            .hint {
+                font-size: 20px;
             }
-            
-            .header-text h1 {
-                font-size: 1.3rem;
-            }
-            
-            .chat-messages {
-                padding: 16px;
-                gap: 12px;
-            }
-            
-            .message {
-                max-width: 90%;
-                padding: 14px 18px;
-                font-size: 14px;
-            }
-            
-            .input-area {
-                padding: 16px;
-            }
-            
-            #message-input {
-                padding: 14px 18px;
-                font-size: 16px;
-                min-height: 52px;
-            }
-            
-            #send-button {
-                padding: 14px 20px;
-                font-size: 15px;
-                min-width: 70px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .header {
-                padding: 12px 16px;
-            }
-            
-            .logo-section {
-                gap: 12px;
-            }
-            
-            .logo {
-                width: 40px;
-                height: 40px;
-            }
-            
-            .header-text h1 {
-                font-size: 1.2rem;
-            }
-            
-            .header-text .subtitle {
-                font-size: 0.8rem;
-            }
-            
-            .chat-messages {
-                padding: 12px;
-            }
-            
-            .message {
-                max-width: 95%;
-                padding: 12px 16px;
-            }
-            
-            .input-area {
-                padding: 12px;
-            }
-        }
-        
-        /* Стили для скроллбара */
-        .chat-messages::-webkit-scrollbar {
-            width: 6px;
-        }
-        
-        .chat-messages::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
-        
-        .chat-messages::-webkit-scrollbar-thumb {
-            background: #c1c1c1;
-            border-radius: 10px;
-        }
-        
-        .chat-messages::-webkit-scrollbar-thumb:hover {
-            background: #a8a8a8;
         }
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="header">
-            <div class="logo-section">
-                <div class="logo">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Post Pro Logo">
-                </div>
-                <div class="header-text">
-                    <h1>POST PRO Assistant</h1>
-                    <div class="subtitle">AI-powered delivery calculator</div>
-                </div>
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Post Pro Logo">
+        </div>
+        <div class="app-name">Post Pro</div>
+    </div>
+    
+    <!-- Welcome Screen -->
+    <div class="welcome-screen" id="welcomeScreen">
+        <h1 class="greeting">Привет! Я ИИ ассистент</h1>
+        
+        <div class="assistant-role">
+            Что и куда везём?
+        </div>
+        
+        <div class="examples">
+            <div class="example-item" onclick="startChat('20 кг электроники в Алматы')">
+                <div class="example-text">20 кг электроники в Алматы</div>
+            </div>
+            <div class="example-item" onclick="startChat('100 кг одежды в Шымкент')">
+                <div class="example-text">100 кг одежды в Шымкент</div>
+            </div>
+            <div class="example-item" onclick="startChat('Игрушки 15 кубов до Алматы')">
+                <div class="example-text">Игрушки 15 кубов до Алматы</div>
             </div>
         </div>
         
-        <div class="chat-messages" id="chat-messages">
-            <div class="message bot-message">
-                <div class="message-content">
-                    Привет! 👋 Я ваш ИИ-помощник Post Pro. 
-
-🚚 **Рассчитаю доставку из Китая в Казахстан:**
-
-• **Т1:** Доставка до Алматы (склады: ИУ/Гуанчжоу)
-• **Т2:** Доставка до двери по Казахстану
-
-💡 **Просто напишите:**
-- Вес груза
-- Тип товара  
-- Город доставки
-
-И я сразу покажу расчет! ✨
-                </div>
-            </div>
+        <div class="hint">
+            Введите вес, товар и город...
+        </div>
+    </div>
+    
+    <!-- Chat Interface -->
+    <div class="chat-interface" id="chatInterface">
+        <div class="chat-messages" id="chatMessages">
+            <!-- Сообщения будут добавляться здесь -->
         </div>
         
         <div class="input-area">
             <div class="input-container">
                 <textarea 
                     id="message-input" 
-                    placeholder="Например: 50 кг косметики в Астану" 
+                    placeholder="Напишите ваш запрос..." 
                     rows="1"
                     aria-label="Введите сообщение"
                 ></textarea>
@@ -371,14 +323,33 @@
     </div>
 
     <script>
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const chatInterface = document.getElementById('chatInterface');
+        const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
-        const chatMessages = document.getElementById('chat-messages');
+
+        // Запуск чата
+        function startChat(initialMessage = '') {
+            welcomeScreen.style.display = 'none';
+            chatInterface.style.display = 'flex';
+            
+            if (initialMessage) {
+                addMessage(initialMessage, true);
+                // Здесь можно добавить автоматический ответ бота
+                setTimeout(() => {
+                    addMessage('Отлично! Сейчас рассчитаю стоимость доставки для: ' + initialMessage, false);
+                }, 1000);
+            }
+            
+            messageInput.focus();
+        }
 
         // Автоматическое увеличение высоты textarea
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = (this.scrollHeight) + 'px';
+            updateSendButton();
         });
 
         function addMessage(content, isUser = false) {
@@ -419,20 +390,23 @@
             }
         }
 
+        function updateSendButton() {
+            sendButton.disabled = !messageInput.value.trim();
+        }
+
         async function sendMessage() {
             const message = messageInput.value.trim();
             if (!message) return;
 
-            // Добавляем сообщение пользователя
             addMessage(message, true);
             messageInput.value = '';
             messageInput.style.height = 'auto';
             sendButton.disabled = true;
 
-            // Показываем индикатор набора
             showTypingIndicator();
 
             try {
+                // Ваша существующая логика отправки
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
@@ -470,8 +444,15 @@
             }
         });
 
-        // Фокус на поле ввода при загрузке
-        messageInput.focus();
+        // Прямой переход в чат при клике на поле ввода на welcome screen
+        messageInput.addEventListener('focus', function() {
+            if (welcomeScreen.style.display !== 'none') {
+                startChat();
+            }
+        });
+
+        // Инициализация
+        updateSendButton();
     </script>
 </body>
 </html>
