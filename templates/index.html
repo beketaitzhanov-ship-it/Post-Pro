@@ -103,7 +103,7 @@
         
         .example-item:hover {
             background: #f0f4ff;
-            border-color: #4A80F5;
+            border-color: #6e9d90;
         }
         
         .hint {
@@ -113,7 +113,7 @@
             margin-bottom: 20px;
         }
         
-        /* Input Area - всегда видимая */
+        /* Input Area - с цветом #6e9d90 */
         .input-area {
             position: fixed;
             bottom: 0;
@@ -137,7 +137,7 @@
         #message-input {
             flex: 1;
             padding: 14px 18px;
-            border: 1px solid #E0E0E0;
+            border: 2px solid #6e9d90;
             border-radius: 24px;
             font-size: 16px;
             font-family: 'Google Sans', sans-serif;
@@ -147,12 +147,12 @@
             min-height: 50px;
             max-height: 100px;
             line-height: 1.4;
-            transition: border-color 0.2s;
+            transition: all 0.2s ease;
         }
         
         #message-input:focus {
-            border-color: #4A80F5;
             background: #FFFFFF;
+            box-shadow: 0 0 0 3px rgba(110, 157, 144, 0.1);
         }
         
         #message-input::placeholder {
@@ -161,7 +161,7 @@
         
         #send-button {
             padding: 14px 20px;
-            background: #4A80F5;
+            background: #6e9d90;
             color: white;
             border: none;
             border-radius: 20px;
@@ -175,12 +175,23 @@
         }
         
         #send-button:hover:not(:disabled) {
-            background: #3a70e5;
+            background: #5d8c7f;
+            transform: translateY(-1px);
         }
         
         #send-button:disabled {
             background: #cccccc;
             cursor: not-allowed;
+            transform: none;
+        }
+        
+        /* Акцентные элементы цветом #6e9d90 */
+        .header {
+            border-bottom-color: #6e9d90;
+        }
+        
+        .example-item:hover {
+            border-color: #6e9d90;
         }
         
         /* Анимации */
@@ -240,25 +251,6 @@
                 min-width: 55px;
             }
         }
-        
-        @media (max-width: 320px) {
-            .greeting {
-                font-size: 20px;
-            }
-            
-            .question {
-                font-size: 15px;
-            }
-            
-            .examples {
-                max-width: 280px;
-            }
-        }
-        
-        /* Обеспечиваем прокрутку если контент не помещается */
-        .main-content {
-            -webkit-overflow-scrolling: touch;
-        }
     </style>
 </head>
 <body>
@@ -295,7 +287,7 @@
         </div>
     </div>
     
-    <!-- Input Area - ВСЕГДА ВИДИМАЯ -->
+    <!-- Input Area -->
     <div class="input-area">
         <div class="input-container">
             <input 
@@ -326,20 +318,20 @@
             sendButton.disabled = !messageInput.value.trim();
         }
         
-        // Отправка сообщения
+        // Отправка сообщения - БЕЗ ALERT!
         function sendMessage() {
             const message = messageInput.value.trim();
             if (!message) return;
             
-            // Здесь будет логика отправки сообщения
-            console.log('Отправка сообщения:', message);
+            // Здесь будет реальная отправка на сервер
+            console.log('Отправка сообщения на сервер:', message);
             
             // Очистка поля ввода
             messageInput.value = '';
             updateSendButton();
             
-            // Можно добавить логику отображения в чате
-            alert(`Запрос отправлен: "${message}"\n\n(В реальном приложении здесь будет отправка на сервер и ответ бота)`);
+            // В реальном приложении здесь будет fetch запрос к вашему боту
+            // и обработка ответа без alert
         }
         
         // Обработчики событий
@@ -358,12 +350,6 @@
         
         // Инициализация состояния кнопки
         updateSendButton();
-
-        // Предотвращаем скрытие контента за клавиатурой на мобильных
-        window.addEventListener('resize', function() {
-            const content = document.querySelector('.main-content');
-            content.style.paddingBottom = '80px';
-        });
     </script>
 </body>
 </html>
