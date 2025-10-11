@@ -65,29 +65,25 @@ SYSTEM_INSTRUCTION = """
    - Т1: Доставка из Китая до Алматы (только до склада, самовывоз)
    - Т2: Доставка до двери в ЛЮБОМ городе Казахстана, включая доставку по Алматы
 
-3. **СТРАХОВАНИЕ:**
-   - Страхование груза: 1% от объявленной стоимости
-   - Если клиент спрашивает про страховку - объясни про 1% и попроси указать стоимость груза
-
-4. **ОПЛАТА:**
+3. **ОПЛАТА:**
    - У нас пост-оплата: вы платите при получении груза
    - Форматы оплаты: безналичный расчет, наличные, Kaspi, Halyk, Freedom Bank
    - Если спрашивают про оплату - всегда объясняй эту систему
 
-5. **ЛОГИКА ДИАЛОГА:**
+4. **ЛОГИКА ДИАЛОГА:**
    - Сначала быстрый расчет
    - Потом предлагай детальный расчет
    - В конце предлагай заявку
 
-6. **СБОР ЗАЯВКИ:**
+5. **СБОР ЗАЯВКИ:**
    - Когда клиент пишет имя и телефон - сохраняй заявку
    - Формат: [ЗАЯВКА] Имя: [имя], Телефон: [телефон]
 
-7. **ОБЩИЕ ВОПРОСЫ:**
+6. **ОБЩИЕ ВОПРОСЫ:**
    - Если вопрос не о доставке (погода, имя бота и т.д.) - отвечай нормально
    - Не зацикливайся только на доставке
 
-8. **НЕ УПОМИНАЙ:** другие города Китая кроме ИУ и Гуанчжоу
+7. **НЕ УПОМИНАЙ:** другие города Китая кроме ИУ и Гуанчжоу
 
 Всегда будь дружелюбным и профессиональным! 😊
 """
@@ -142,7 +138,7 @@ def calculate_quick_cost(weight: float, product_type: str, city: str):
         logger.error(f"Ошибка расчета: {e}")
         return None
 
-def calculate_detailed_cost(weight: float, product_type: str, city: str, cargo_value_usd: float = None):
+def calculate_detailed_cost(weight: float, product_type: str, city: str):
     """Детальный расчет с разбивкой"""
     quick_cost = calculate_quick_cost(weight, product_type, city)
     if not quick_cost:
@@ -157,14 +153,6 @@ def calculate_detailed_cost(weight: float, product_type: str, city: str, cargo_v
     # Находим актуальную ставку Т1
     product_type_lower = product_type.lower()
     t1_rate = T1_RATES.get(product_type_lower, 2.40)
-    
-    # Расчет страховки если указана стоимость груза
-    insurance_cost = 0
-    insurance_text = ""
-    if cargo_value_usd and cargo_value_usd > 0:
-        insurance_cost = cargo_value_usd * 0.01 * EXCHANGE_RATE  # 1% в тенге
-        total += insurance_cost
-        insurance_text = f"**Страхование груза (1%):**\n• ${cargo_value_usd} × 1% = ${cargo_value_usd * 0.01:.2f} USD\n• В тенге: {insurance_cost:.0f} тенге\n\n"
     
     # Определяем текст для Т2 в зависимости от города
     city_name = city.capitalize()
@@ -186,12 +174,12 @@ def calculate_detailed_cost(weight: float, product_type: str, city: str, cargo_v
         f"**Т2: Доставка до двери ({zone_text})**\n"
         f"{t2_explanation}\n"
         f"• {t2_rate} тенге/кг × {weight} кг = {t2_cost:.0f} тенге\n\n"
-        f"{insurance_text}"
         f"**Комиссия компании (20%):**\n"
         f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = {(t1_cost + t2_cost) * 0.20:.0f} тенге\n\n"
         f"------------------------------------\n"
         f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:.0f} тенге**\n\n"
         f"{comparison_text}\n\n"
+        f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
         f"💳 **Оплата:** пост-оплата при получении\n\n"
         f"❓ **Не понятны тарифы?** Напишите 'объясни тарифы'\n\n"
         f"✅ **Хотите оставить заявку?** Напишите ваше имя и телефон!"
@@ -215,20 +203,6 @@ def explain_tariffs():
 💡 **Важно:** Даже если вы в Алматы, но нужна доставка до адреса - это Т2
 
 💳 **Оплата:** пост-оплата при получении (наличные, Kaspi, Halyk, Freedom Bank, безнал)"""
-
-def get_insurance_info():
-    """Информация о страховке"""
-    return """📦 **Страхование груза:**
-
-• **Ставка:** 1% от объявленной стоимости груза
-• **Минимум:** от $10 стоимости груза
-• **Покрытие:** полная стоимость груза при утере или повреждении
-
-💡 **Чтобы рассчитать страховку,** напишите стоимость вашего груза в долларах.
-
-Например: "Стоимость груза 5000$" или "Груз стоит 2000 долларов"
-
-После этого я включу страховку в общий расчет! ✅"""
 
 def get_payment_info():
     """Информация о способах оплаты"""
@@ -332,28 +306,6 @@ def extract_delivery_info(text):
         logger.error(f"Ошибка извлечения данных: {e}")
         return None, None, None
 
-def extract_cargo_value(text):
-    """Извлечение стоимости груза для страховки"""
-    try:
-        patterns = [
-            r'стоимос[\w\s]*[\:\-\s]*(\d+(?:\.\d+)?)\s*(?:usd|\$|доллар)',
-            r'груз[\w\s]*стоит[\s]*(\d+(?:\.\d+)?)\s*(?:usd|\$|доллар)',
-            r'(\d+(?:\.\d+)?)\s*(?:usd|\$|доллар)[\w\s]*стоимос',
-            r'стоимос[\w\s]*[\:\-\s]*(\d+(?:\.\d+)?)\s*[^0-9]',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text.lower())
-            if match:
-                value = float(match.group(1))
-                if value >= 10:  # Минимальная стоимость для страховки
-                    return value
-        
-        return None
-    except Exception as e:
-        logger.error(f"Ошибка извлечения стоимости груза: {e}")
-        return None
-
 def extract_contact_info(text):
     """Умное извлечение контактных данных"""
     name = None
@@ -407,8 +359,6 @@ def index():
         session['chat_history'] = []
     if 'waiting_for_contacts' not in session:
         session['waiting_for_contacts'] = False
-    if 'cargo_value' not in session:
-        session['cargo_value'] = None
     return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
@@ -422,7 +372,6 @@ def chat():
         delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None})
         chat_history = session.get('chat_history', [])
         waiting_for_contacts = session.get('waiting_for_contacts', False)
-        cargo_value = session.get('cargo_value', None)
         
         chat_history.append(f"Клиент: {user_message}")
         
@@ -431,8 +380,7 @@ def chat():
             session.update({
                 'delivery_data': {'weight': None, 'product_type': None, 'city': None},
                 'chat_history': [f"Клиент: {user_message}"],
-                'waiting_for_contacts': False,
-                'cargo_value': None
+                'waiting_for_contacts': False
             })
             return jsonify({"response": "Привет! 👋 Я ассистент Post Pro. Помогу рассчитать доставку из Китая в Казахстан! Укажите вес, тип товара и город доставки."})
         
@@ -449,8 +397,6 @@ def chat():
                     details += f", Товар: {delivery_data['product_type']}"
                 if delivery_data['city']:
                     details += f", Город: {delivery_data['city']}"
-                if cargo_value:
-                    details += f", Стоимость груза: ${cargo_value}"
                 
                 save_application(details)
                 
@@ -458,25 +404,13 @@ def chat():
                 session.update({
                     'delivery_data': {'weight': None, 'product_type': None, 'city': None},
                     'chat_history': [],
-                    'waiting_for_contacts': False,
-                    'cargo_value': None
+                    'waiting_for_contacts': False
                 })
                 
                 return jsonify({"response": "🎉 Спасибо, что выбрали Post Pro! Менеджер свяжется с вами в течение 15 минут. 📞"})
             else:
                 # Если не распознали - уточняем
                 return jsonify({"response": "Не удалось распознать контакты. Пожалуйста, укажите в формате: 'Имя, 87001234567'"})
-        
-        # Запросы о страховке
-        if any(word in user_message.lower() for word in ['страхован', 'страховк', 'страхуете', 'страховка', 'страхование']):
-            return jsonify({"response": get_insurance_info()})
-        
-        # Извлечение стоимости груза для страховки
-        extracted_value = extract_cargo_value(user_message)
-        if extracted_value:
-            session['cargo_value'] = extracted_value
-            cargo_value = extracted_value
-            return jsonify({"response": f"✅ Стоимость груза ${extracted_value} сохранена! Страховка составит ${extracted_value * 0.01:.2f} ({extracted_value * 0.01 * EXCHANGE_RATE:.0f} тенге)\n\nТеперь покажу расчет с учетом страховки!"})
         
         # Запросы об оплате
         if any(word in user_message.lower() for word in ['оплат', 'платеж', 'заплатит', 'деньги', 'как платит', 'наличн', 'безнал', 'kaspi', 'halyk', 'freedom', 'банк']):
@@ -528,8 +462,7 @@ def chat():
                 detailed_response = calculate_detailed_cost(
                     delivery_data['weight'], 
                     delivery_data['product_type'], 
-                    delivery_data['city'],
-                    cargo_value
+                    delivery_data['city']
                 )
                 session['delivery_data'] = delivery_data
                 session['chat_history'] = chat_history
@@ -543,18 +476,10 @@ def chat():
             )
             
             if quick_cost:
-                # Добавляем страховку к быстрому расчету если есть
-                total_with_insurance = quick_cost['total']
-                insurance_note = ""
-                if cargo_value:
-                    insurance_cost = cargo_value * 0.01 * EXCHANGE_RATE
-                    total_with_insurance += insurance_cost
-                    insurance_note = f"\n+ Страховка: {insurance_cost:.0f} тенге"
-                
                 quick_response = (
                     f"🚚 **Быстрый расчет:**\n"
                     f"• {delivery_data['weight']} кг «{delivery_data['product_type']}» в {delivery_data['city'].capitalize()}\n"
-                    f"• 💰 Примерная стоимость: **~{total_with_insurance:.0f} тенге**{insurance_note}\n\n"
+                    f"• 💰 Примерная стоимость: **~{quick_cost['total']:.0f} тенге**\n\n"
                     f"📊 Хотите детальный расчет с разбивкой по тарифам?"
                 )
                 
@@ -576,8 +501,6 @@ def chat():
             context_lines.append(f"- Товар: {delivery_data['product_type']}")
         if delivery_data['city']:
             context_lines.append(f"- Город: {delivery_data['city']}")
-        if cargo_value:
-            context_lines.append(f"- Стоимость груза: ${cargo_value}")
         
         context = "\n".join(context_lines)
         bot_response = get_gemini_response(user_message, context)
