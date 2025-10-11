@@ -53,7 +53,6 @@ T2_RATES = {  # Алматы → город назначения (тенге/к�
 
 # --- КОНСТАНТЫ ДЛЯ РАСТАМОЖКИ ---
 CUSTOMS_RATES = {
-    # Примеры ставок пошлин для разных категорий (в %)
     "одежда": 10, "электроника": 5, "косметика": 15, "техника": 5,
     "мебель": 10, "автозапчасти": 5, "общие товары": 10, "инструменты": 8,
     "ткани": 12, "посуда": 10, "продукты": 15, "лекарства": 0, "белье": 12
@@ -205,7 +204,7 @@ def calculate_detailed_cost(weight: float, product_type: str, city: str):
     return response
 
 # --- ФУНКЦИИ РАСЧЕТА РАСТАМОЖКИ ---
-def calculate_customs_cost(invoice_value: float, product_type: str, weight: float = None, has_certificate: bool = False, needs_origin_cert: bool = False):
+def calculate_customs_cost(invoice_value: float, product_type: str, weight: float = None, has_certificate: bool = False, needs_certificate: bool = False):
     """Расчет таможенных платежей"""
     try:
         # Пошлина
@@ -219,7 +218,7 @@ def calculate_customs_cost(invoice_value: float, product_type: str, weight: floa
         
         # Сборы
         customs_fee = CUSTOMS_FEES["оформление"]
-        certificate_fee = CUSTOMS_FEES["сертификат"] if needs_origin_cert else 0
+        certificate_fee = CUSTOMS_FEES["сертификат"] if needs_certificate else 0
         origin_cert_fee = CUSTOMS_FEES["происхождения"] * EXCHANGE_RATE if has_certificate else 0
         
         total_customs_kzt = duty_kzt + vat_kzt + customs_fee + certificate_fee + origin_cert_fee
@@ -256,6 +255,19 @@ def get_tnved_code(product_name):
     except Exception as e:
         logger.error(f"Ошибка получения кода ТН ВЭД: {e}")
         return "Ошибка определения"
+
+def check_certification_requirements(product_name):
+    """Проверка требований к сертификации через Gemini"""
+    if not model:
+        return False
+    
+    try:
+        prompt = f"Нужен ли сертификат соответствия ТР ТС для товара: '{product_name}'? Ответь только 'ДА' или 'НЕТ' без пояснений."
+        response = model.generate_content(prompt)
+        return "ДА" in response.text.upper()
+    except Exception as e:
+        logger.error(f"Ошибка проверки сертификации: {e}")
+        return True  # На всякий случай предполагаем что нужен
 
 def get_customs_procedure():
     """Процедура растаможки"""
@@ -472,7 +484,7 @@ def extract_contact_info(text):
 @app.route('/')
 def index(): 
     if 'delivery_data' not in session:
-        session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None}
+        session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None}
     if 'customs_data' not in session:
         session['customs_data'] = {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False}
     if 'chat_history' not in session:
@@ -491,7 +503,7 @@ def chat():
             return jsonify({"response": "Пожалуйста, введите сообщение."})
         
         # Инициализация сессий
-        delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None})
+        delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None})
         customs_data = session.get('customs_data', {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False})
         chat_history = session.get('chat_history', [])
         waiting_for_contacts = session.get('waiting_for_contacts', False)
@@ -502,13 +514,25 @@ def chat():
         # Приветствия
         if user_message.lower() in GREETINGS:
             session.update({
-                'delivery_data': {'weight': None, 'product_type': None, 'city': None},
+                'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None},
                 'customs_data': {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False},
                 'chat_history': [f"Клиент: {user_message}"],
                 'waiting_for_contacts': False,
                 'waiting_for_customs': False
             })
-            return jsonify({"response": "Привет! 👋 Я ассистент Post Pro. Помогу рассчитать доставку из Китая в Казахстан! Укажите вес, тип товара и город доставки."})
+            return jsonify({"response": "Привет! 👋 Я ваш ИИ-помощник Post Pro.\n\n🚚 **Рассчитаю доставку из Китая в Казахстан:**\n\nВыберите тип доставки:\n\n🟢 **КАРГО** (упрощенная доставка)\n• Для личных вещей, пробных партий\n• Расчет по тарифам Т1 и Т2\n• Быстрый предварительный расчет\n\n🔵 **ИНВОЙС** (полное таможенное оформление)\n• Для коммерческих партий с инвойсом\n• Полный расчет таможенных платежей\n• Растаможка, сертификация, документы\n\n**Напишите 'Карго' или 'Инвойс'**"})
+        
+        # Выбор типа доставки (только если еще не выбран)
+        if not delivery_data['delivery_type']:
+            if any(word in user_message.lower() for word in ['карго', 'cargo', 'личные вещи', 'пробная партия', 'упрощен']):
+                delivery_data['delivery_type'] = 'CARGO'
+                session['delivery_data'] = delivery_data
+                return jsonify({"response": "🟢 **ВЫБРАН КАРГО** (упрощенная доставка)\n\nРасчет по тарифам Т1 и Т2\n\n💡 **Просто напишите:**\n• Вес груза\n• Тип товара  \n• Город доставки\n\n**Пример:** '50 кг одежды в Астану'"})
+            
+            elif any(word in user_message.lower() for word in ['инвойс', 'invoice', 'коммерческий', 'растаможка', 'таможен', 'полный']):
+                delivery_data['delivery_type'] = 'INVOICE'
+                session['delivery_data'] = delivery_data
+                return jsonify({"response": "🔵 **ВЫБРАН ИНВОЙС** (полное таможенное оформление)\n\n• Полный расчет таможенных платежей\n• Работа с кодами ТН ВЭД\n• Сертификация и документы\n\n💡 **Для расчета укажите:**\n• Вес груза и тип товара\n• Город доставки в Казахстане  \n• Стоимость товара по инвойсу (USD)\n\n**Пример:** '100 кг электроники в Алматы, стоимость 5000 USD'"})
         
         # Если ждем контакты
         if waiting_for_contacts:
@@ -525,12 +549,14 @@ def chat():
                     details += f", Город: {delivery_data['city']}"
                 if customs_data['invoice_value']:
                     details += f", Стоимость: {customs_data['invoice_value']} USD"
+                if delivery_data['delivery_type']:
+                    details += f", Тип: {delivery_data['delivery_type']}"
                 
                 save_application(details)
                 
                 # Очищаем сессию
                 session.update({
-                    'delivery_data': {'weight': None, 'product_type': None, 'city': None},
+                    'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None},
                     'customs_data': {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False},
                     'chat_history': [],
                     'waiting_for_contacts': False,
@@ -542,8 +568,8 @@ def chat():
                 # Если не распознали - уточняем
                 return jsonify({"response": "Не удалось распознать контакты. Пожалуйста, укажите в формате: 'Имя, 87001234567'"})
         
-        # Если ждем данные для растаможки
-        if waiting_for_customs:
+        # Если ждем данные для растаможки (режим ИНВОЙС)
+        if waiting_for_customs or delivery_data['delivery_type'] == 'INVOICE':
             invoice_value, has_certificate, needs_certificate = extract_customs_info(user_message)
             
             if invoice_value:
@@ -556,7 +582,7 @@ def chat():
                     customs_data['product_type'] = delivery_data['product_type']
                 else:
                     # Пытаемся определить тип товара из сообщения
-                    product_types = ['одежда', 'электроника', 'косметика', 'техника', 'мебель', 'автозапчасти']
+                    product_types = ['одежда', 'электроника', 'косметика', 'техника', 'мебель', 'автозапчасти', 'посуда']
                     for p_type in product_types:
                         if p_type in user_message.lower():
                             customs_data['product_type'] = p_type
@@ -569,60 +595,16 @@ def chat():
                 # Получаем код ТН ВЭД
                 tnved_code = get_tnved_code(customs_data['product_type'])
                 
+                # Проверяем нужны ли сертификаты
+                needs_certification = check_certification_requirements(customs_data['product_type'])
+                
                 # Расчет таможенных платежей
                 customs_cost = calculate_customs_cost(
                     customs_data['invoice_value'],
                     customs_data['product_type'],
                     delivery_data['weight'] if delivery_data['weight'] else 100,
                     customs_data['has_certificate'],
-                    customs_data['needs_certificate']
+                    needs_certification or customs_data['needs_certificate']
                 )
                 
-                if customs_cost:
-                    response = (
-                        f"📊 **Расчет растаможки:**\n\n"
-                        f"**Параметры:**\n"
-                        f"• Стоимость товара: {customs_data['invoice_value']} USD\n"
-                        f"• Тип товара: {customs_data['product_type']}\n"
-                        f"• Код ТН ВЭД: {tnved_code}\n"
-                        f"• Сертификат происхождения: {'Есть' if customs_data['has_certificate'] else 'Нет'}\n\n"
-                        f"**Таможенные платежи:**\n"
-                        f"• Пошлина ({CUSTOMS_RATES.get(customs_data['product_type'].lower(), 10)}%): {customs_cost['duty_kzt']:.0f} тенге\n"
-                        f"• НДС (12%): {customs_cost['vat_kzt']:.0f} тенге\n"
-                        f"• Сбор за оформление: {customs_cost['customs_fee']:.0f} тенге\n"
-                    )
-                    
-                    if customs_data['needs_certificate']:
-                        response += f"• Сертификат соответствия: {customs_cost['certificate_fee']:.0f} тенге\n"
-                    
-                    if customs_data['has_certificate']:
-                        response += f"• Оформление сертификата происхождения: {customs_cost['origin_cert_fee']:.0f} тенге\n"
-                    
-                    response += (
-                        f"\n💰 **Итого таможенные платежи:** ~{customs_cost['total_kzt']:.0f} тенге\n\n"
-                        f"💡 **Это предварительный расчет.** Точную сумму определит таможенный брокер.\n\n"
-                        f"✅ **Хотите оставить заявку на растаможку?** Напишите ваше имя и телефон!"
-                    )
-                    
-                    session['waiting_for_customs'] = False
-                    session['waiting_for_contacts'] = True
-                    session['customs_data'] = customs_data
-                    session['chat_history'] = chat_history
-                    
-                    return jsonify({"response": response})
-                else:
-                    session['waiting_for_customs'] = False
-                    return jsonify({"response": "❌ Не удалось рассчитать таможенные платежи. Попробуйте еще раз."})
-            else:
-                return jsonify({"response": "Не удалось определить стоимость товара. Укажите в формате: 'Товар на 5000 USD' или 'Стоимость 5000 долларов'"})
-        
-        # Запросы об оплате
-        if any(word in user_message.lower() for word in ['оплат', 'платеж', 'заплатит', 'деньги', 'как платит', 'наличн', 'безнал', 'kaspi', 'halyk', 'freedom', 'банк']):
-            return jsonify({"response": get_payment_info()})
-        
-        # Запросы о тарифах Т1/Т2
-        if any(word in user_message.lower() for word in ['т1', 'т2', 'тариф', 'что такое т', 'объясни тариф']):
-            return jsonify({"response": explain_tariffs()})
-        
-        # Запросы о растаможке
-        if any(word in user_message.lower() for word in ['растаможк', 'та
+               
