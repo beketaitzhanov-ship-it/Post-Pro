@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POST PRO Assistant</title>
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cambria:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -13,7 +13,7 @@
         }
         
         body {
-            font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Cambria', 'Times New Roman', serif;
             background: #f8f9fa;
             color: #3c4043;
             min-height: 100vh;
@@ -37,68 +37,42 @@
         }
         
         .header {
-            padding: 12px 16px;
+            padding: 8px 16px;
             border-bottom: 1px solid #e8eaed;
             background: white;
             border-radius: 12px 12px 0 0;
             background: #6e9d90;
             color: white;
             flex-shrink: 0;
-        }
-        
-        .logo-section {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .logo {
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden;
-            background: rgba(255, 255, 255, 0.2);
-        }
-        
-        .logo img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
         }
         
         .header-text h1 {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: 500;
             color: white;
             line-height: 1.2;
         }
         
-        .header-text .subtitle {
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.9);
-            margin-top: 1px;
-        }
-        
         .chat-messages {
             flex-grow: 1;
             overflow-y: auto;
-            padding: 16px;
+            padding: 12px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 8px;
             background: #f8f9fa;
         }
         
         .message {
-            max-width: 85%;
-            padding: 12px 16px;
+            max-width: 90%;
+            padding: 10px 14px;
             border-radius: 16px;
             line-height: 1.4;
             animation: fadeIn 0.3s ease;
-            font-size: 14px;
+            font-size: 13px;
             word-wrap: break-word;
         }
         
@@ -124,7 +98,7 @@
         }
         
         .input-area {
-            padding: 12px 16px;
+            padding: 10px 14px;
             border-top: 1px solid #e8eaed;
             background: white;
             border-radius: 0 0 12px 12px;
@@ -133,21 +107,21 @@
         
         .input-container {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             align-items: flex-end;
         }
         
         #message-input {
             flex-grow: 1;
-            padding: 14px 16px;
+            padding: 10px 14px;
             border: 2px solid #6e9d90;
             border-radius: 20px;
-            font-size: 15px;
-            font-family: 'Google Sans', sans-serif;
+            font-size: 14px;
+            font-family: 'Cambria', 'Times New Roman', serif;
             outline: none;
             resize: none;
-            min-height: 48px;
-            max-height: 100px;
+            min-height: 40px;
+            max-height: 80px;
             line-height: 1.4;
             background: #f8f9fa;
             transition: all 0.2s;
@@ -159,18 +133,18 @@
         }
         
         #send-button {
-            padding: 14px 20px;
+            padding: 10px 16px;
             background: #6e9d90;
             color: white;
             border: none;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
-            font-family: 'Google Sans', sans-serif;
-            min-width: 70px;
-            min-height: 48px;
+            font-family: 'Cambria', 'Times New Roman', serif;
+            min-width: 60px;
+            min-height: 40px;
         }
         
         #send-button:hover:not(:disabled) {
@@ -225,77 +199,17 @@
             }
             
             .header {
-                padding: 10px 14px;
+                padding: 6px 12px;
                 border-radius: 0;
-            }
-            
-            .logo {
-                width: 28px;
-                height: 28px;
-            }
-            
-            .header-text h1 {
-                font-size: 1.1rem;
-            }
-            
-            .header-text .subtitle {
-                font-size: 0.7rem;
-            }
-            
-            .chat-messages {
-                padding: 12px;
-                gap: 10px;
-            }
-            
-            .message {
-                max-width: 90%;
-                padding: 10px 14px;
-                font-size: 13px;
-            }
-            
-            .input-area {
-                padding: 10px 14px;
-            }
-            
-            #message-input {
-                padding: 12px 14px;
-                font-size: 14px;
-                min-height: 44px;
-            }
-            
-            #send-button {
-                padding: 12px 16px;
-                font-size: 13px;
-                min-width: 65px;
-                min-height: 44px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            .header {
-                padding: 8px 12px;
-            }
-            
-            .logo-section {
-                gap: 8px;
-            }
-            
-            .logo {
-                width: 24px;
-                height: 24px;
             }
             
             .header-text h1 {
                 font-size: 1rem;
             }
             
-            .header-text .subtitle {
-                font-size: 0.65rem;
-            }
-            
             .chat-messages {
-                padding: 10px;
-                gap: 8px;
+                padding: 8px;
+                gap: 6px;
             }
             
             .message {
@@ -309,16 +223,54 @@
             }
             
             #message-input {
-                padding: 10px 12px;
-                min-height: 40px;
+                padding: 8px 12px;
+                min-height: 36px;
                 font-size: 13px;
             }
             
             #send-button {
-                padding: 10px 14px;
+                padding: 8px 12px;
                 font-size: 12px;
-                min-width: 60px;
-                min-height: 40px;
+                min-width: 55px;
+                min-height: 36px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header {
+                padding: 5px 10px;
+            }
+            
+            .header-text h1 {
+                font-size: 0.9rem;
+            }
+            
+            .chat-messages {
+                padding: 6px;
+                gap: 4px;
+            }
+            
+            .message {
+                max-width: 98%;
+                padding: 6px 10px;
+                font-size: 11px;
+            }
+            
+            .input-area {
+                padding: 6px 10px;
+            }
+            
+            #message-input {
+                padding: 6px 10px;
+                min-height: 32px;
+                font-size: 12px;
+            }
+            
+            #send-button {
+                padding: 6px 10px;
+                font-size: 11px;
+                min-width: 50px;
+                min-height: 32px;
             }
         }
 
@@ -354,14 +306,8 @@
 <body>
     <div class="chat-container">
         <div class="header">
-            <div class="logo-section">
-                <div class="logo">
-                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Post Pro Logo">
-                </div>
-                <div class="header-text">
-                    <h1>POST PRO Assistant</h1>
-                    <div class="subtitle">AI-powered delivery calculator</div>
-                </div>
+            <div class="header-text">
+                <h1>POST PRO Assistant</h1>
             </div>
         </div>
         
@@ -372,8 +318,8 @@
 
 🚚 **Рассчитаю доставку из Китая в Казахстан:**
 
-• **Т1:** Доставка до Алматы (склады: ИУ/Гуанчжоу)
-• **Т2:** Доставка до двери по Казахстану
+• Доставка до Алматы (склады: ИУ/Гуанчжоу)
+• Доставка до двери по Казахстану
 
 💡 **Просто напишите:**
 - Вес груза
@@ -408,7 +354,7 @@
         // Автоматическое увеличение высоты textarea
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
-            this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+            this.style.height = Math.min(this.scrollHeight, 80) + 'px';
         });
 
         function addMessage(content, isUser = false) {
