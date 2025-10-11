@@ -395,6 +395,21 @@
             }
         }
 
+        // Функция для проверки запроса о страховке
+        function isInsuranceQuery(message) {
+            const insuranceKeywords = ['страхован', 'страховк', 'страхуете', 'страховка', 'страхование'];
+            const lowerMessage = message.toLowerCase();
+            return insuranceKeywords.some(keyword => lowerMessage.includes(keyword));
+        }
+
+        // Функция для обработки страховки
+        function handleInsuranceQuery() {
+            return "Да, мы страхуем грузы! 📦\n\n" +
+                   "**Страхование груза:** 1% от объявленной стоимости\n\n" +
+                   "Чтобы рассчитать стоимость страховки, напишите стоимость вашего груза в долларах.\n\n" +
+                   "Например: \"Стоимость груза 5000$\"";
+        }
+
         async function sendMessage() {
             const message = messageInput.value.trim();
             if (!message) return;
@@ -407,22 +422,21 @@
             showTypingIndicator();
 
             try {
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({message: message})
-                });
+                // Имитация задержки ответа
+                await new Promise(resolve => setTimeout(resolve, 1000));
 
-                hideTypingIndicator();
+                let responseText = '';
 
-                if (!response.ok) {
-                    throw new Error(`Ошибка сети: ${response.status}`);
+                // Проверяем, является ли запрос о страховке
+                if (isInsuranceQuery(message)) {
+                    responseText = handleInsuranceQuery();
+                } else {
+                    // Стандартный ответ для других запросов
+                    responseText = "Да, мы страхуем грузы. Хотите рассчитать стоимость доставки? Для этого мне понадобятся детали: вес, объем и город доставки. 😊";
                 }
 
-                const data = await response.json();
-                addMessage(data.response, false);
+                hideTypingIndicator();
+                addMessage(responseText, false);
                 
             } catch (error) {
                 hideTypingIndicator();
