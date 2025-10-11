@@ -372,9 +372,6 @@
 
 🚚 **Рассчитаю доставку из Китая в Казахстан:**
 
-• **Т1:** Доставка до Алматы (склады: ИУ/Гуанчжоу)
-• **Т2:** Доставка до двери по Казахстану
-
 💡 **Просто напишите:**
 - Вес груза
 - Тип товара  
@@ -389,7 +386,7 @@
             <div class="input-container">
                 <textarea 
                     id="message-input" 
-                    placeholder="Например: 50 кг косметики в Астану" 
+                    placeholder="Например: 100 кг электроники в Астану" 
                     rows="1"
                     aria-label="Введите сообщение"
                 ></textarea>
@@ -404,6 +401,7 @@
         const messageInput = document.getElementById('message-input');
         const sendButton = document.getElementById('send-button');
         const chatMessages = document.getElementById('chat-messages');
+        let sessionId = 'session_' + Date.now();
 
         // Автоматическое увеличение высоты textarea
         messageInput.addEventListener('input', function() {
@@ -466,7 +464,10 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({message: message})
+                    body: JSON.stringify({
+                        message: message,
+                        session_id: sessionId
+                    })
                 });
 
                 hideTypingIndicator();
