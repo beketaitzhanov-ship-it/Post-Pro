@@ -777,16 +777,16 @@ def chat():
                 save_application(app_details)
                 
                 response = (
-                    f"🤖 ✅ Заявка оформлена!\n\n"
-                    f"👤 {name}, мы свяжемся с вами по телефону {phone} в течение 15 минут.\n\n"
-                    f"📋 Детали заявки:\n"
-                    f"• Тип: {delivery_data['delivery_type']}\n"
-                    f"• Вес: {delivery_data['weight']} кг\n"
-                    f"• Товар: {delivery_data['product_type']}\n"
-                    f"• Город: {delivery_data['city']}\n"
-                    f"• Доставка: {delivery_data['delivery_option']}\n\n"
-                    f"💬 Для нового расчета напишите /start"
-                )
+    f"🤖 ✅ Заявка оформлена!\n\n"
+    f"👤 {name}, мы свяжемся с вами по телефону {phone} в течение 15 минут.\n\n"
+    f"📋 Детали заявки:\n"
+    f"• Тип: {delivery_data['delivery_type']}\n"
+    f"• Вес: {delivery_data['weight']} кг\n"
+    f"• Товар: {delivery_data['product_type']}\n"
+    f"• Город: {delivery_data['city']}\n"
+    f"• Доставка: {delivery_data['delivery_option']}\n\n"
+    f"🔄 Для нового расчета напишите «старт»"
+)
                 
                 chat_history.append(f"Ассистент: {response}")
                 session['chat_history'] = chat_history
@@ -1034,4 +1034,5 @@ if __name__ == '__main__':
         app.run(host='0.0.0.0', port=5000, debug=True)
     else:
         logger.error("!!! Не удалось инициализировать модели Gemini")
+
 
