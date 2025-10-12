@@ -61,13 +61,15 @@ CUSTOMS_RATES = {
 CUSTOMS_FEES = {
     "оформление": 15000,  # тенге
     "сертификат": 120000,  # тенге
-    "происхождения": 500  # USD
+    "происхождения": 500,  # USD
+    "брокер": 60000,      # тенге
+    "декларация": 15000   # тенге
 }
 
 GREETINGS = ["привет", "здравствуй", "здравствуйте", "салем", "сәлем", "добрый день", "добрый вечер", "доброе утро"]
 
-# --- СИСТЕМНЫЙ ПРОМПТ ---
-SYSTEM_INSTRUCTION = """
+# --- СИСТЕМНЫЕ ПРОМПТЫ ---
+MAIN_SYSTEM_INSTRUCTION = """
 Ты — умный ассистент компании PostPro. Твоя главная цель — помочь клиенту рассчитать стоимость доставки и оформить заявку.
 
 ***ВАЖНЫЕ ПРАВИЛА:***
@@ -97,28 +99,68 @@ SYSTEM_INSTRUCTION = """
    - Формат: [ЗАЯВКА] Имя: [имя], Телефон: [телефон]
 
 7. **ОБЩИЕ ВОПРОСЫ:**
-   - Если вопрос не о доставке (погода, имя бота и т.д.) - отвечай нормально
-   - Не зацикливайся только на доставке
+   - Если вопрос не о доставке - отвечай как умный ИИ-помощник
+   - Поддержи любой диалог, не отказывай в ответах
+   - Мягко возвращай к теме доставки, но не навязчиво
 
 8. **НЕ УПОМИНАЙ:** другие города Китая кроме ИУ и Гуанчжоу
 
 Всегда будь дружелюбным и профессиональным! 😊
 """
 
-# --- ИНИЦИАЛИЗАЦИЯ МОДЕЛИ ---
-model = None
-try:
-    if GEMINI_API_KEY:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(
-            model_name='models/gemini-2.0-flash',
-            system_instruction=SYSTEM_INSTRUCTION
-        )
-        logger.info(">>> Модель Gemini успешно инициализирована.")
-    else:
-        logger.error("!!! API ключ не найден")
-except Exception as e:
-    logger.error(f"!!! Ошибка инициализации Gemini: {e}")
+CUSTOMS_SYSTEM_INSTRUCTION = """
+Ты — специалист по таможенному оформлению компании PostPro. Твоя задача — помочь с растаможкой грузов.
+
+***ОСНОВНЫЕ ФУНКЦИИ:***
+
+1. **РАСЧЕТ ТАМОЖЕННЫХ ПЛАТЕЖЕЙ:**
+   - Пошлины (зависят от кода ТН ВЭД)
+   - НДС 12% (от стоимости + пошлина)
+   - Таможенные сборы
+
+2. **ДОКУМЕНТЫ ДЛЯ РАСТАМОЖКИ:**
+   - Коммерческий инвойс
+   - Упаковочный лист
+   - Внешнеэкономический контракт
+   - Товаротранспортная накладная
+
+3. **СЕРТИФИКАЦИЯ:**
+   - Сертификат соответствия ТР ТС (при необходимости)
+   - Сертификат происхождения (для преференций)
+
+4. **УСЛУГИ БРОКЕРА:**
+   - Полное таможенное сопровождение: 60,000 тенге
+   - Подача декларации: 15,000 тенге
+
+Всегда будь точным в расчетах и профессиональным в общении!
+"""
+
+# --- ИНИЦИАЛИЗАЦИЯ МОДЕЛЕЙ ---
+main_model = None
+customs_model = None
+
+def initialize_models():
+    """Инициализация моделей Gemini"""
+    global main_model, customs_model
+    try:
+        if GEMINI_API_KEY:
+            genai.configure(api_key=GEMINI_API_KEY)
+            main_model = genai.GenerativeModel(
+                model_name='models/gemini-2.0-flash',
+                system_instruction=MAIN_SYSTEM_INSTRUCTION
+            )
+            customs_model = genai.GenerativeModel(
+                model_name='models/gemini-2.0-flash', 
+                system_instruction=CUSTOMS_SYSTEM_INSTRUCTION
+            )
+            logger.info(">>> Модели Gemini успешно инициализированы.")
+            return True
+        else:
+            logger.error("!!! API ключ не найден")
+            return False
+    except Exception as e:
+        logger.error(f"!!! Ошибка инициализации Gemini: {e}")
+        return False
 
 # --- ФУНКЦИИ РАСЧЕТА ДОСТАВКИ ---
 def calculate_quick_cost(weight: float, product_type: str, city: str):
@@ -149,13 +191,14 @@ def calculate_quick_cost(weight: float, product_type: str, city: str):
             't2_cost': t2_cost_kzt, 
             'total': total_cost,
             'zone': zone,
-            't2_rate': t2_rate
+            't2_rate': t2_rate,
+            't1_rate': t1_rate
         }
     except Exception as e:
         logger.error(f"Ошибка расчета: {e}")
         return None
 
-def calculate_detailed_cost(weight: float, product_type: str, city: str):
+def calculate_detailed_cost(weight: float, product_type: str, city: str, delivery_type: str = "до двери"):
     """Детальный расчет с разбивкой"""
     quick_cost = calculate_quick_cost(weight, product_type, city)
     if not quick_cost:
@@ -163,24 +206,21 @@ def calculate_detailed_cost(weight: float, product_type: str, city: str):
     
     t1_cost = quick_cost['t1_cost']
     t2_cost = quick_cost['t2_cost'] 
-    total = quick_cost['total']
-    zone = quick_cost['zone']
+    t1_rate = quick_cost['t1_rate']
     t2_rate = quick_cost['t2_rate']
+    zone = quick_cost['zone']
     
-    # Находим актуальную ставку Т1
-    product_type_lower = product_type.lower()
-    t1_rate = T1_RATES.get(product_type_lower, 2.40)
-    
-    # Определяем текст для Т2 в зависимости от города
-    city_name = city.capitalize()
-    if zone == "алматы":
-        t2_explanation = f"• Доставка по городу Алматы до вашего адреса"
-        zone_text = "город Алматы"
-        comparison_text = f"💡 **Если самовывоз со склада в Алматы:** {t1_cost * 1.20:.0f} тенге"
+    # Определяем стоимость в зависимости от типа доставки
+    if delivery_type == "самовывоз":
+        total = t1_cost * 1.20
+        delivery_text = f"💰 **ИТОГО с самовывозом из Алматы:** ≈ **{total:.0f} тенге**"
+        comparison_text = f"💡 **Если доставка до двери:** {(t1_cost + t2_cost) * 1.20:.0f} тенге"
     else:
-        t2_explanation = f"• Доставка до вашего адреса в {city_name}"
-        zone_text = f"Зона {zone}"
+        total = (t1_cost + t2_cost) * 1.20
+        delivery_text = f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:.0f} тенге**"
         comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost * 1.20:.0f} тенге"
+    
+    city_name = city.capitalize()
     
     response = (
         f"📊 **Детальный расчет для {weight} кг «{product_type}» в г. {city_name}:**\n\n"
@@ -188,19 +228,44 @@ def calculate_detailed_cost(weight: float, product_type: str, city: str):
         f"• До склада в Алматы (самовывоз)\n"
         f"• ${t1_rate}/кг × {weight} кг = ${weight * t1_rate:.2f} USD\n"
         f"• По курсу {EXCHANGE_RATE} тенге/$ = {t1_cost:.0f} тенге\n\n"
-        f"**Т2: Доставка до двери ({zone_text})**\n"
-        f"{t2_explanation}\n"
-        f"• {t2_rate} тенге/кг × {weight} кг = {t2_cost:.0f} тенге\n\n"
+    )
+    
+    if delivery_type == "до двери":
+        if zone == "алматы":
+            t2_explanation = f"• Доставка по городу Алматы до вашего адреса"
+            zone_text = "город Алматы"
+        else:
+            t2_explanation = f"• Доставка до вашего адреса в {city_name}"
+            zone_text = f"Зона {zone}"
+        
+        response += (
+            f"**Т2: Доставка до двери ({zone_text})**\n"
+            f"{t2_explanation}\n"
+            f"• {t2_rate} тенге/кг × {weight} кг = {t2_cost:.0f} тенге\n\n"
+        )
+    
+    response += (
         f"**Комиссия компании (20%):**\n"
-        f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = {(t1_cost + t2_cost) * 0.20:.0f} тенге\n\n"
+        f"• {t1_cost:.0f} тенге × 20% = {t1_cost * 0.20:.0f} тенге\n"
+    )
+    
+    if delivery_type == "до двери":
+        response += f"• {t2_cost:.0f} тенге × 20% = {t2_cost * 0.20:.0f} тенге\n\n"
+    else:
+        response += "\n"
+    
+    response += (
         f"------------------------------------\n"
-        f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:.0f} тенге**\n\n"
+        f"{delivery_text}\n\n"
         f"{comparison_text}\n\n"
         f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
         f"💳 **Оплата:** пост-оплата при получении\n\n"
-        f"❓ **Не понятны тарифы?** Напишите 'объясни тарифы'\n\n"
-        f"✅ **Хотите оставить заявку?** Напишите ваше имя и телефон!"
+        f"🏷️ **Выберите вариант доставки:**\n"
+        f"🚚 **1 - Самовывоз из Алматы** (только Т1)\n"
+        f"🏠 **2 - Доставка до двери** (Т1 + Т2)\n\n"
+        f"Напишите '1' или '2' чтобы продолжить!"
     )
+    
     return response
 
 # --- ФУНКЦИИ РАСЧЕТА РАСТАМОЖКИ ---
@@ -220,8 +285,10 @@ def calculate_customs_cost(invoice_value: float, product_type: str, weight: floa
         customs_fee = CUSTOMS_FEES["оформление"]
         certificate_fee = CUSTOMS_FEES["сертификат"] if needs_certificate else 0
         origin_cert_fee = CUSTOMS_FEES["происхождения"] * EXCHANGE_RATE if has_certificate else 0
+        broker_fee = CUSTOMS_FEES["брокер"]
+        declaration_fee = CUSTOMS_FEES["декларация"]
         
-        total_customs_kzt = duty_kzt + vat_kzt + customs_fee + certificate_fee + origin_cert_fee
+        total_customs_kzt = duty_kzt + vat_kzt + customs_fee + certificate_fee + origin_cert_fee + broker_fee + declaration_fee
         
         return {
             'duty_usd': duty_usd,
@@ -230,6 +297,8 @@ def calculate_customs_cost(invoice_value: float, product_type: str, weight: floa
             'customs_fee': customs_fee,
             'certificate_fee': certificate_fee,
             'origin_cert_fee': origin_cert_fee,
+            'broker_fee': broker_fee,
+            'declaration_fee': declaration_fee,
             'total_kzt': total_customs_kzt,
             'total_usd': total_customs_kzt / EXCHANGE_RATE
         }
@@ -239,12 +308,12 @@ def calculate_customs_cost(invoice_value: float, product_type: str, weight: floa
 
 def get_tnved_code(product_name):
     """Получение кода ТН ВЭД через Gemini"""
-    if not model:
+    if not customs_model:
         return "Не удалось определить"
     
     try:
         prompt = f"Определи код ТН ВЭД ЕАЭС для товара: '{product_name}'. Верни ТОЛЬКО код в формате XXXXX XXX X без каких-либо пояснений, текста или точек. Только цифры и пробелы."
-        response = model.generate_content(prompt)
+        response = customs_model.generate_content(prompt)
         code = response.text.strip()
         
         # Проверяем, что ответ похож на код ТН ВЭД
@@ -258,100 +327,88 @@ def get_tnved_code(product_name):
 
 def check_certification_requirements(product_name):
     """Проверка требований к сертификации через Gemini"""
-    if not model:
+    if not customs_model:
         return False
     
     try:
         prompt = f"Нужен ли сертификат соответствия ТР ТС для товара: '{product_name}'? Ответь только 'ДА' или 'НЕТ' без пояснений."
-        response = model.generate_content(prompt)
+        response = customs_model.generate_content(prompt)
         return "ДА" in response.text.upper()
     except Exception as e:
         logger.error(f"Ошибка проверки сертификации: {e}")
         return True  # На всякий случай предполагаем что нужен
 
-def get_customs_procedure():
-    """Процедура растаможки"""
-    return """📋 **Процедура растаможки:**
-
-1. **Подготовка документов:**
-   • Коммерческий инвойс
-   • Упаковочный лист  
-   • Внешнеэкономический контракт
-   • Товаротранспортная накладная
-
-2. **Таможенные платежи:**
-   • Таможенная пошлина (зависит от кода ТН ВЭД)
-   • НДС 12% (от стоимости + пошлина)
-   • Таможенный сбор
-
-3. **Сертификация:**
-   • Сертификат соответствия (при необходимости)
-   • Сертификат происхождения (для преференций)
-
-💡 **Наш таможенный брокер поможет с оформлением!**"""
-
-def explain_tariffs():
-    """Объяснение тарифов Т1 и Т2"""
-    return """🚚 **Объяснение тарифов:**
-
-**Т1 - Доставка до склада в Алматы:**
-• Доставка из Китая до нашего сортировочного склада в Алматы
-• Вы забираете груз самовывозом со склада
-• ТОЛЬКО склад в Алматы, без доставки по городу
-
-**Т2 - Доставка до двери:**
-• Доставка из Китая + доставка до вашего адреса в ЛЮБОМ городе Казахстана
-• Включая доставку по городу Алматы до вашего адреса
-• Мы привозим груз прямо к вам
-
-💡 **Важно:** Даже если вы в Алматы, но нужна доставка до адреса - это Т2
-
-💳 **Оплата:** пост-оплата при получении (наличные, Kaspi, Halyk, Freedom Bank, безнал)"""
-
-def get_payment_info():
-    """Информация о способах оплаты"""
-    return """💳 **Условия оплаты:**
-
-💰 **Пост-оплата:** Вы платите при получении груза в удобном для вас формате:
-
-• **Безналичный расчет** перечислением на счет
-• **Наличными** 
-• **Kaspi Bank**
-• **Halyk Bank** 
-• **Freedom Bank**
-
-💡 Оплата производится только после доставки и осмотра груза!"""
-
-def get_delivery_procedure():
-    return """📦 **Процедура доставки:**
-
-1. **Прием груза в Китае:** Ваш груз прибудет на наш склад в Китае (ИУ или Гуанчжоу)
-2. **Осмотр и обработка:** Взвешиваем, фотографируем, упаковываем
-3. **Подтверждение:** Присылаем детали груза
-4. **Отправка:** Доставляем до Алматы (Т1) или до двери (Т2)
-5. **Получение и оплата:** Забираете груз и оплачиваете удобным способом
-
-💳 **Оплата:** пост-оплата при получении (наличные, Kaspi, Halyk, Freedom Bank, безнал)
-
-✅ **Хотите оформить заявку?** Напишите ваше имя и телефон!"""
-
-def save_application(details):
+def get_customs_full_calculation(weight: float, product_type: str, city: str, invoice_value: float, delivery_type: str):
+    """Полный расчет с доставкой и растаможкой"""
     try:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"Новая заявка: {timestamp}\n{details}\n"
-        with open("applications.txt", "a", encoding="utf-8") as f: 
-            f.write("="*50 + "\n" + log_entry + "="*50 + "\n\n")
-        logger.info(f"Заявка сохранена: {details}")
-    except Exception as e: 
-        logger.error(f"Ошибка сохранения: {e}")
+        # Расчет доставки
+        delivery_cost = calculate_quick_cost(weight, product_type, city)
+        if not delivery_cost:
+            return "Ошибка расчета доставки"
+        
+        # Определяем стоимость доставки в зависимости от типа
+        if delivery_type == "самовывоз":
+            delivery_total = delivery_cost['t1_cost'] * 1.20
+            delivery_description = "Самовывоз из Алматы"
+        else:
+            delivery_total = (delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20
+            delivery_description = "Доставка до двери"
+        
+        # Расчет растаможки
+        needs_certification = check_certification_requirements(product_type)
+        customs_cost = calculate_customs_cost(invoice_value, product_type, weight, False, needs_certification)
+        if not customs_cost:
+            return "Ошибка расчета растаможки"
+        
+        tnved_code = get_tnved_code(product_type)
+        
+        # Итоговая стоимость
+        total_cost = delivery_total + customs_cost['total_kzt']
+        
+        response = (
+            f"📊 Расчет для ИНВОЙС:\n\n"
+            f"✅ Товар: {weight} кг {product_type} в {city.capitalize()}\n"
+            f"✅ Таможенная стоимость: {invoice_value} USD\n\n"
+            
+            f"🏷️ Выберите вариант доставки:\n\n"
+            
+            f"🚚 ВАРИАНТ 1: ДОСТАВКА ДО АЛМАТЫ (Т1)\n"
+            f"• Доставка до склада в Алматы (самовывоз)\n"
+            f"• Таможенное оформление включено\n"
+            f"• Услуги брокера: {CUSTOMS_FEES['брокер']:,} ₸\n"
+            f"• Подача декларации: {CUSTOMS_FEES['декларация']:,} ₸\n"
+            f"📦 Стоимость доставки: {delivery_cost['t1_cost'] * 1.20:.0f} ₸\n"
+            f"💰 ОБЩАЯ СТОИМОСТЬ: {delivery_cost['t1_cost'] * 1.20 + customs_cost['total_kzt']:.0f} ₸\n\n"
+            
+            f"🏠 ВАРИАНТ 2: ДОСТАВКА ДО ДВЕРИ (Т1+Т2)\n"
+            f"• Доставка до вашего адреса в {city.capitalize()}\n"
+            f"• Таможенное оформление включено\n"
+            f"• Услуги брокера: {CUSTOMS_FEES['брокер']:,} ₸\n"
+            f"• Подача декларации: {CUSTOMS_FEES['декларация']:,} ₸\n"
+            f"📦 Стоимость доставки: {(delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20:.0f} ₸\n"
+            f"💰 ОБЩАЯ СТОИМОСТЬ: {(delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20 + customs_cost['total_kzt']:.0f} ₸\n\n"
+            
+            f"📋 Код ТН ВЭД: {tnved_code}\n"
+            f"📄 Сертификация: {'требуется' if needs_certification else 'не требуется'}\n\n"
+            
+            f"💡 Напишите '1' или '2' чтобы выбрать вариант доставки!"
+        )
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Ошибка полного расчета: {e}")
+        return "Ошибка расчета"
 
-def get_gemini_response(user_message, context=""):
-    if not model:
+def get_gemini_response(user_message, context="", use_customs_model=False):
+    """Получение ответа от Gemini"""
+    if not main_model:
         return "Сервис временно недоступен"
     
     try:
+        model_to_use = customs_model if use_customs_model else main_model
         full_prompt = f"Контекст: {context}\n\nСообщение: {user_message}\n\nОтвет:"
-        response = model.generate_content(
+        response = model_to_use.generate_content(
             full_prompt,
             generation_config=GenerationConfig(
                 temperature=0.7,
@@ -480,11 +537,22 @@ def extract_contact_info(text):
     
     return name, phone
 
+def save_application(details):
+    """Сохранение заявки"""
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"Новая заявка: {timestamp}\n{details}\n"
+        with open("applications.txt", "a", encoding="utf-8") as f: 
+            f.write("="*50 + "\n" + log_entry + "="*50 + "\n\n")
+        logger.info(f"Заявка сохранена: {details}")
+    except Exception as e: 
+        logger.error(f"Ошибка сохранения: {e}")
+
 # --- ROUTES ---
 @app.route('/')
 def index(): 
     if 'delivery_data' not in session:
-        session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None}
+        session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None, 'delivery_option': None}
     if 'customs_data' not in session:
         session['customs_data'] = {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False}
     if 'chat_history' not in session:
@@ -493,6 +561,13 @@ def index():
         session['waiting_for_contacts'] = False
     if 'waiting_for_customs' not in session:
         session['waiting_for_customs'] = False
+    if 'waiting_for_delivery_choice' not in session:
+        session['waiting_for_delivery_choice'] = False
+    
+    # Инициализация моделей при первом обращении
+    if main_model is None:
+        initialize_models()
+    
     return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
@@ -503,36 +578,83 @@ def chat():
             return jsonify({"response": "Пожалуйста, введите сообщение."})
         
         # Инициализация сессий
-        delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None})
+        delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None, 'delivery_option': None})
         customs_data = session.get('customs_data', {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False})
         chat_history = session.get('chat_history', [])
         waiting_for_contacts = session.get('waiting_for_contacts', False)
         waiting_for_customs = session.get('waiting_for_customs', False)
+        waiting_for_delivery_choice = session.get('waiting_for_delivery_choice', False)
         
         chat_history.append(f"Клиент: {user_message}")
         
         # Приветствия
         if user_message.lower() in GREETINGS:
             session.update({
-                'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None},
+                'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None, 'delivery_option': None},
                 'customs_data': {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False},
                 'chat_history': [f"Клиент: {user_message}"],
                 'waiting_for_contacts': False,
-                'waiting_for_customs': False
+                'waiting_for_customs': False,
+                'waiting_for_delivery_choice': False
             })
-            return jsonify({"response": "Привет! 👋 Я ваш ИИ-помощник Post Pro.\n\n🚚 **Рассчитаю доставку из Китая в Казахстан:**\n\nВыберите тип доставки:\n\n🟢 **КАРГО** (упрощенная доставка)\n• Для личных вещей, пробных партий\n• Расчет по тарифам Т1 и Т2\n• Быстрый предварительный расчет\n\n🔵 **ИНВОЙС** (полное таможенное оформление)\n• Для коммерческих партий с инвойсом\n• Полный расчет таможенных платежей\n• Растаможка, сертификация, документы\n\n**Напишите 'Карго' или 'Инвойс'**"})
+            return jsonify({"response": "Привет! \n👋 Я ваш ИИ-помощник Post Pro.\n\n🚚 Рассчитаю доставку из Китая в Казахстан:\n\n• Доставка до Алматы \n• Доставка до двери по Казахстану\n\nНаши склады в Китае: ИУ/Гуанчжоу\n\nВыберите доставку:\n\n📦 КАРГО - упрощенная доставка для личных вещей, пробных партий\n\n📄 ИНВОЙС - полное таможенное оформление для коммерческих партий\n\nПросто напишите:\n- Вес груза\n- Тип товара  \n- Город доставки\n- Карго или Инвойс\n\nИ я сразу покажу расчет! ✨"})
         
-        # Выбор типа доставки (только если еще не выбран)
-        if not delivery_data['delivery_type']:
-            if any(word in user_message.lower() for word in ['карго', 'cargo', 'личные вещи', 'пробная партия', 'упрощен']):
-                delivery_data['delivery_type'] = 'CARGO'
+        # Если ждем выбор варианта доставки
+        if waiting_for_delivery_choice:
+            if user_message in ['1', '2']:
+                delivery_option = "самовывоз" if user_message == '1' else "до двери"
+                delivery_data['delivery_option'] = delivery_option
                 session['delivery_data'] = delivery_data
-                return jsonify({"response": "🟢 **ВЫБРАН КАРГО** (упрощенная доставка)\n\nРасчет по тарифам Т1 и Т2\n\n💡 **Просто напишите:**\n• Вес груза\n• Тип товара  \n• Город доставки\n\n**Пример:** '50 кг одежды в Астану'"})
-            
-            elif any(word in user_message.lower() for word in ['инвойс', 'invoice', 'коммерческий', 'растаможка', 'таможен', 'полный']):
-                delivery_data['delivery_type'] = 'INVOICE'
-                session['delivery_data'] = delivery_data
-                return jsonify({"response": "🔵 **ВЫБРАН ИНВОЙС** (полное таможенное оформление)\n\n• Полный расчет таможенных платежей\n• Работа с кодами ТН ВЭД\n• Сертификация и документы\n\n💡 **Для расчета укажите:**\n• Вес груза и тип товара\n• Город доставки в Казахстане  \n• Стоимость товара по инвойсу (USD)\n\n**Пример:** '100 кг электроники в Алматы, стоимость 5000 USD'"})
+                session['waiting_for_delivery_choice'] = False
+                
+                # Формируем итоговый расчет
+                if delivery_data['delivery_type'] == 'CARGO':
+                    # Расчет для КАРГО
+                    response = calculate_detailed_cost(
+                        delivery_data['weight'], 
+                        delivery_data['product_type'], 
+                        delivery_data['city'],
+                        delivery_option
+                    )
+                    response += f"\n\n✅ Хотите оформить заявку? Напишите имя и телефон!"
+                    session['waiting_for_contacts'] = True
+                    
+                else:  # INVOICE
+                    # Расчет для ИНВОЙС
+                    customs_cost = calculate_customs_cost(
+                        customs_data['invoice_value'],
+                        customs_data['product_type'],
+                        delivery_data['weight'],
+                        customs_data['has_certificate'],
+                        customs_data['needs_certificate']
+                    )
+                    
+                    delivery_cost = calculate_quick_cost(delivery_data['weight'], delivery_data['product_type'], delivery_data['city'])
+                    
+                    if delivery_option == "самовывоз":
+                        total_delivery = delivery_cost['t1_cost'] * 1.20
+                    else:
+                        total_delivery = (delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20
+                    
+                    total_cost = total_delivery + customs_cost['total_kzt']
+                    
+                    tnved_code = get_tnved_code(delivery_data['product_type'])
+                    needs_certification = check_certification_requirements(delivery_data['product_type'])
+                    
+                    response = (
+                        f"✅ Выбрана ДОСТАВКА ДО {'ДВЕРИ' if delivery_option == 'до двери' else 'АЛМАТЫ (самовывоз)'}\n\n"
+                        f"💰 Итоговая стоимость: {total_cost:,.0f} ₸\n"
+                        f"📦 {'Груз будет доставлен по адресу в ' + delivery_data['city'].capitalize() if delivery_option == 'до двери' else 'Самовывоз со склада в Алматы'}\n"
+                        f"⏱️ Срок доставки: 12-15 дней\n\n"
+                        f"📋 Код ТН ВЭД: {tnved_code}\n"
+                        f"📄 Сертификация: {'требуется' if needs_certification else 'не требуется'}\n\n"
+                        f"✅ Хотите оформить заявку? Напишите имя и телефон!"
+                    )
+                    session['waiting_for_contacts'] = True
+                
+                chat_history.append(f"Бот: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
         
         # Если ждем контакты
         if waiting_for_contacts:
@@ -547,6 +669,8 @@ def chat():
                     details += f", Товар: {delivery_data['product_type']}"
                 if delivery_data['city']:
                     details += f", Город: {delivery_data['city']}"
+                if delivery_data['delivery_option']:
+                    details += f", Доставка: {delivery_data['delivery_option']}"
                 if customs_data['invoice_value']:
                     details += f", Стоимость: {customs_data['invoice_value']} USD"
                 if delivery_data['delivery_type']:
@@ -556,55 +680,115 @@ def chat():
                 
                 # Очищаем сессию
                 session.update({
-                    'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None},
+                    'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None, 'delivery_option': None},
                     'customs_data': {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False},
                     'chat_history': [],
                     'waiting_for_contacts': False,
-                    'waiting_for_customs': False
+                    'waiting_for_customs': False,
+                    'waiting_for_delivery_choice': False
                 })
                 
-                return jsonify({"response": "🎉 Спасибо, что выбрали Post Pro! Менеджер свяжется с вами в течение 15 минут. 📞"})
+                response = "🎉 Заявка оформлена!\n\n⏰ Менеджер свяжется с вами в течение 30 минут для подтверждения деталей! \n🕙 Рабочее время: с 10:00 до 20:00 по времени Астаны 📞"
+                return jsonify({"response": response})
             else:
                 # Если не распознали - уточняем
                 return jsonify({"response": "Не удалось распознать контакты. Пожалуйста, укажите в формате: 'Имя, 87001234567'"})
         
-        # Если ждем данные для растаможки (режим ИНВОЙС)
-        if waiting_for_customs or delivery_data['delivery_type'] == 'INVOICE':
+        # Выбор типа доставки (только если еще не выбран)
+        if not delivery_data['delivery_type']:
+            if any(word in user_message.lower() for word in ['карго', 'cargo', 'личные вещи', 'пробная партия', 'упрощен']):
+                delivery_data['delivery_type'] = 'CARGO'
+                session['delivery_data'] = delivery_data
+                return jsonify({"response": "📦 ВЫБРАН КАРГО (упрощенная доставка)\n\nРасчет по тарифам Т1 и Т2\n\n💡 Просто напишите:\n• Вес груза\n• Тип товара  \n• Город доставки\n\nПример: '50 кг одежды в Астану'"})
+            
+            elif any(word in user_message.lower() for word in ['инвойс', 'invoice', 'коммерческий', 'растаможка', 'таможен', 'полный']):
+                delivery_data['delivery_type'] = 'INVOICE'
+                session['delivery_data'] = delivery_data
+                session['waiting_for_customs'] = True
+                return jsonify({"response": "📄 ВЫБРАН ИНВОЙС (полное таможенное оформление)\n\n• Полный расчет таможенных платежей\n• Работа с кодами ТН ВЭД\n• Сертификация и документы\n\n💡 Для расчета укажите:\n• Вес груза и тип товара\n• Город доставки в Казахстане  \n• Стоимость товара по инвойсу (USD)\n\nПример: '100 кг электроники в Алматы, стоимость 5000 USD'"})
+        
+        # Если выбран тип доставки, но нет данных
+        if delivery_data['delivery_type'] and not delivery_data['weight']:
+            # Пытаемся извлечь данные о доставке
+            weight, product_type, city = extract_delivery_info(user_message)
+            
+            if weight and city:
+                delivery_data['weight'] = weight
+                delivery_data['city'] = city
+                if product_type:
+                    delivery_data['product_type'] = product_type
+                else:
+                    delivery_data['product_type'] = "общие товары"
+                
+                session['delivery_data'] = delivery_data
+                
+                # Для ИНВОЙС также пытаемся извлечь стоимость
+                if delivery_data['delivery_type'] == 'INVOICE':
+                    invoice_value, has_cert, needs_cert = extract_customs_info(user_message)
+                    if invoice_value:
+                        customs_data['invoice_value'] = invoice_value
+                        customs_data['has_certificate'] = has_cert
+                        customs_data['needs_certificate'] = needs_cert
+                        session['customs_data'] = customs_data
+                        
+                        # Показываем полный расчет с выбором доставки
+                        response = get_customs_full_calculation(
+                            weight, delivery_data['product_type'], city, 
+                            invoice_value, "до двери"
+                        )
+                        session['waiting_for_delivery_choice'] = True
+                    else:
+                        response = "✅ Данные получены! Теперь укажите стоимость товара по инвойсу в USD.\n\nПример: '2000 USD' или 'стоимость 5000 USD'"
+                        session['waiting_for_customs'] = True
+                
+                else:  # CARGO
+                    # Показываем расчет с выбором доставки
+                    response = calculate_detailed_cost(weight, delivery_data['product_type'], city, "до двери")
+                    session['waiting_for_delivery_choice'] = True
+                
+                chat_history.append(f"Бот: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+        
+        # Если ждем данные для растаможки (ИНВОЙС)
+        if waiting_for_customs or (delivery_data['delivery_type'] == 'INVOICE' and delivery_data['weight'] and not customs_data['invoice_value']):
             invoice_value, has_certificate, needs_certificate = extract_customs_info(user_message)
             
             if invoice_value:
                 customs_data['invoice_value'] = invoice_value
                 customs_data['has_certificate'] = has_certificate
                 customs_data['needs_certificate'] = needs_certificate
+                session['customs_data'] = customs_data
+                session['waiting_for_customs'] = False
                 
-                # Если есть данные о товаре из доставки - используем их
-                if delivery_data['product_type']:
-                    customs_data['product_type'] = delivery_data['product_type']
-                else:
-                    # Пытаемся определить тип товара из сообщения
-                    product_types = ['одежда', 'электроника', 'косметика', 'техника', 'мебель', 'автозапчасти', 'посуда']
-                    for p_type in product_types:
-                        if p_type in user_message.lower():
-                            customs_data['product_type'] = p_type
-                            break
-                
-                # Если тип товара не определен - используем общий
-                if not customs_data['product_type']:
-                    customs_data['product_type'] = "общие товары"
-                
-                # Получаем код ТН ВЭД
-                tnved_code = get_tnved_code(customs_data['product_type'])
-                
-                # Проверяем нужны ли сертификаты
-                needs_certification = check_certification_requirements(customs_data['product_type'])
-                
-                # Расчет таможенных платежей
-                customs_cost = calculate_customs_cost(
-                    customs_data['invoice_value'],
-                    customs_data['product_type'],
-                    delivery_data['weight'] if delivery_data['weight'] else 100,
-                    customs_data['has_certificate'],
-                    needs_certification or customs_data['needs_certificate']
+                # Показываем полный расчет с выбором доставки
+                response = get_customs_full_calculation(
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city'], 
+                    invoice_value, 
+                    "до двери"
                 )
+                session['waiting_for_delivery_choice'] = True
                 
-               
+                chat_history.append(f"Бот: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+            else:
+                return jsonify({"response": "Не удалось распознать стоимость. Пожалуйста, укажите стоимость в USD.\n\nПример: '2000 USD' или 'стоимость 5000 USD'"})
+        
+        # Если все данные есть, но не распознана команда - используем Gemini
+        ai_response = get_gemini_response(user_message, " ".join(chat_history[-3:]))
+        chat_history.append(f"Бот: {ai_response}")
+        session['chat_history'] = chat_history
+        
+        return jsonify({"response": ai_response})
+        
+    except Exception as e:
+        logger.error(f"Ошибка в чате: {e}")
+        return jsonify({"response": "Извините, произошла ошибка. Попробуйте еще раз."})
+
+if __name__ == '__main__':
+    # Инициализация моделей при запуске
+    initialize_models()
+    app.run(debug=True, host='0.0.0.0', port=5000)
