@@ -176,9 +176,42 @@ def parse_delivery_choice(message):
         return None
 
 def doesnt_know_tnved(message):
-    """Определяет, что клиент не знает код ТНВЭД"""
-    patterns = ['не знаю', 'не знаю код', 'нет кода', 'не помню', 'подскажите', 'подскажи']
-    return any(pattern in message.lower() for pattern in patterns)
+    """Определяет, что клиент не знает код ТНВЭД - РАСШИРЕННАЯ ВЕРСИЯ"""
+    patterns = [
+        # Основные фразы "не знаю"
+        'не знаю', 'не знаю код', 'нет кода', 'не помню', 'не знаю я', 
+        'не знаю я код', 'не знаю код тнвед', 'не знаю тнвед',
+        
+        # Запросы помощи
+        'подскажите', 'подскажи', 'помогите', 'помоги', 'посоветуй', 'посоветуйте',
+        'какой код', 'какой код нужен', 'какой тнвед', 'что указывать',
+        'где взять', 'где найти', 'где посмотреть', 'где узнать',
+        'как узнать', 'как найти', 'как определить', 'как посмотреть',
+        
+        # Предложения автоматического определения
+        'определи код', 'подбери код', 'найди код', 'автоматически', 'сам определи',
+        'выбери код', 'установи код', 'подставь код', 'вставь код',
+        'сгенерируй код', 'создай код', 'придумай код',
+        
+        # Отрицания и отсутствие кода
+        'нет', 'не имею', 'не указан', 'отсутствует', 'забыл', 'забыла',
+        'я не знаю', 'я не помню', 'код неизвестен', 'без кода', 'нет информации',
+        'не могу найти', 'не могу определить', 'не получается найти',
+        
+        # Вопросы о коде
+        'что такое тнвед', 'что значит тнвед', 'для чего код',
+        'зачем код', 'почему нужен код', 'что это за код',
+        
+        # Простые отказы
+        'пропусти', 'пропустим', 'дальше', 'продолжи', 'без кода',
+        'не важно', 'не имеет значения', 'не принципиально',
+        
+        # Сомнения
+        'сомневаюсь', 'не уверен', 'не уверена', 'не понятно',
+        'затрудняюсь', 'не могу сказать', 'хз'
+    ]
+    message_lower = message.lower().strip()
+    return any(pattern in message_lower for pattern in patterns)
 
 def get_missing_data(delivery_data, customs_data, delivery_type):
     """Определяет какие данные отсутствуют - ИСПРАВЛЕННАЯ ЛОГИКА"""
@@ -555,7 +588,7 @@ def get_gemini_response(user_message, context="", use_customs_model=False):
 def save_application(details):
     """Сохранение заявки"""
     try:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-d %H:%M:%S")
         log_entry = f"Новая заявка: {timestamp}\n{details}\n"
         with open("applications.txt", "a", encoding="utf-8") as f: 
             f.write("="*50 + "\n" + log_entry + "="*50 + "\n\n")
@@ -695,32 +728,49 @@ def chat():
         
         # Обработка кода ТНВЭД
         if waiting_for_tnved:
-            invoice_value, tnved_code = extract_customs_info(user_message)
-            if tnved_code:
+            if doesnt_know_tnved(user_message):
+                # 🎯 ИСПРАВЛЕНИЕ: Не теряем product_type
+                product_type = delivery_data.get('product_type', 'общие товары')
+                tnved_code = get_tnved_code(product_type)
                 customs_data['tnved_code'] = tnved_code
                 session['customs_data'] = customs_data
                 session['waiting_for_tnved'] = False
                 
-                # Если есть стоимость инвойса, переходим к расчету
-                if customs_data['invoice_value']:
-                    response = get_customs_full_calculation(
-                        delivery_data['weight'],
-                        delivery_data['product_type'],
-                        delivery_data['city'],
-                        customs_data['invoice_value'],
-                        customs_data['tnved_code']
-                    )
-                    session['waiting_for_delivery_choice'] = True
-                else:
-                    response = "Отлично! Теперь укажите стоимость товаров в USD (например: 1500 USD)"
-                    session['waiting_for_customs'] = True
+                response = f"🔍 Определяю код ТНВЭД для '{product_type}'...\n✅ Найден код: {tnved_code}\n\n📊 Продолжаем расчет..."
                 
-                chat_history.append(f"Ассистент: {response}")
+                full_calculation = get_customs_full_calculation(
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city'], 
+                    customs_data['invoice_value'],
+                    tnved_code
+                )
+                session['waiting_for_delivery_choice'] = True
+                
+                chat_history.append(f"Бот: {response}")
                 session['chat_history'] = chat_history
-                return jsonify({"response": response})
+                return jsonify({"response": response + "\n\n" + full_calculation})
+            
+            elif re.match(r'^\d{4,10}', user_message):
+                customs_data['tnved_code'] = user_message
+                session['customs_data'] = customs_data
+                session['waiting_for_tnved'] = False
+                
+                response = get_customs_full_calculation(
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city'], 
+                    customs_data['invoice_value'],
+                    user_message
+                )
+                session['waiting_for_delivery_choice'] = True
+                
+                chat_history.append(f"Бот: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": f"✅ Код ТНВЭД сохранен!\n\n{response}"})
             else:
-                response = "Не удалось распознать код ТНВЭД. Пожалуйста, введите код в формате: `XXXXX XXX X` или просто цифры"
-                chat_history.append(f"Ассистент: {response}")
+                response = "🤔 Не понял ваш ответ о коде ТНВЭД.\n\n💡 **Что вы можете сделать:**\n• Ввести код ТНВЭД вручную (например: 8504 40 100 9)\n• Написать \"не знаю\" - я определю код автоматически\n• Написать \"помоги\" - подскажу где найти код\n\n📋 Просто напишите одно из этих слов или введите код!"
+                chat_history.append(f"Бот: {response}")
                 session['chat_history'] = chat_history
                 return jsonify({"response": response})
         
@@ -764,7 +814,7 @@ def chat():
                         session['waiting_for_delivery_choice'] = True
                         session['waiting_for_customs'] = False
                     else:
-                        response = "Отлично! Теперь укажите код ТНВЭД или напишите 'не знаю' для автоматического определения"
+                        response = "✅ Получены данные! 📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
                         session['waiting_for_tnved'] = True
                         session['waiting_for_customs'] = False
                 
@@ -813,6 +863,9 @@ def chat():
             if delivery_data['delivery_type'] == 'INVOICE' and not customs_data['invoice_value']:
                 response = f"Для расчета ИНВОЙСА укажите стоимость товаров в USD (например: 1500 USD)"
                 session['waiting_for_customs'] = True
+            elif delivery_data['delivery_type'] == 'INVOICE' and 'код ТНВЭД' in missing_data:
+                response = f"✅ Получены данные: {delivery_data['weight']} кг {delivery_data['product_type']} в {delivery_data['city']}, стоимость {customs_data['invoice_value']} USD\n\n📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
+                session['waiting_for_tnved'] = True
             else:
                 response = f"Для расчета укажите: {', '.join(missing_data)}"
         else:
@@ -855,7 +908,7 @@ def chat():
                         )
                         session['waiting_for_delivery_choice'] = True
                     else:
-                        response = "Укажите код ТНВЭД или напишите 'не знаю' для автоматического определения"
+                        response = "✅ Получены данные! 📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
                         session['waiting_for_tnved'] = True
                 else:
                     response = get_customs_full_calculation(
