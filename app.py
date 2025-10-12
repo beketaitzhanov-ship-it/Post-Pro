@@ -40,7 +40,7 @@ T1_RATES = {  # Китай → Алматы (USD/кг)
     "ткани": 1.70, "одежда": 1.70, "инструменты": 2.10, "общие товары": 2.40, "мебель": 2.10, 
     "косметика": 2.30, "автозапчасти": 2.40, "малая техника": 2.50, "продукты": 2.70, 
     "белье": 2.80, "лекарства": 2.90, "лекарсива": 2.90, "медикаменты": 2.90, "посуда": 2.20,
-    "игрушки": 2.30, "электроника": 2.60, "техника": 2.60, "вещи": 2.40  # ИСПРАВЛЕНО: вечи → вещи
+    "игрушки": 2.30, "электроника": 2.60, "техника": 2.60, "вещи": 2.40
 }
 
 T2_RATES = {  # Алматы → город назначения (тенге/кг)
@@ -57,7 +57,7 @@ CUSTOMS_RATES = {
     "одежда": 10, "электроника": 5, "косметика": 15, "техника": 5,
     "мебель": 10, "автозапчасти": 5, "общие товары": 10, "инструменты": 8,
     "ткани": 12, "посуда": 10, "продукты": 15, "лекарства": 0, "белье": 12,
-    "игрушки": 5, "вещи": 10  # ИСПРАВЛЕНО: вечи → вещи
+    "игрушки": 5, "вещи": 10
 }
 
 CUSTOMS_FEES = {
@@ -113,7 +113,7 @@ CUSTOMS_SYSTEM_INSTRUCTION = """
 - "одежда" → "6109 10 000 0" 
 - "телефон" → "8517 12 000 0"
 - "косметика" → "3304 99 000 0"
-- "вещи" → "6307 90 980 0"  # ИСПРАВЛЕНО: вечи → вещи
+- "вещи" → "6307 90 980 0"
 - "общие товары" → "3926 90 970 9"
 """
 
@@ -157,7 +157,7 @@ def initialize_models():
         logger.error(f"!!! Ошибка инициализации Gemini: {e}")
         return False
 
-# --- ИСПРАВЛЕННЫЕ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+# --- УМНЫЕ ФУНКЦИИ ДЛЯ ОБРАБОТКИ ВВОДА ---
 
 def is_delivery_choice(message):
     """Определяет, является ли сообщение выбором доставки"""
@@ -212,6 +212,45 @@ def doesnt_know_tnved(message):
     ]
     message_lower = message.lower().strip()
     return any(pattern in message_lower for pattern in patterns)
+
+def is_unexpected_input(message, current_state):
+    """Определяет, является ли ввод неожиданным для текущего состояния"""
+    message_lower = message.lower().strip()
+    
+    # Всегда считаем вопросами/командами:
+    question_words = ['?', 'кто', 'что', 'как', 'почему', 'зачем', 'сколько', 'когда', 'где', 
+                     'расскажи', 'объясни', 'помоги', 'помощь', 'help', 'команда',
+                     'хозяин', 'создатель', 'разработчик', 'автор', 'можно ли', 'а можно',
+                     'скидка', 'акция', 'цена', 'стоимость', 'тариф', 'доставка']
+    
+    # Если есть явные признаки вопроса/команды
+    if any(word in message_lower for word in question_words):
+        return True
+    
+    # Проверяем ожидаемые вводы для каждого состояния
+    if current_state == 'waiting_for_contacts':
+        # Ожидаем контакты, а не вопросы
+        contact_indicators = ['имя', 'телефон', 'номер', 'звать', 'контакт', '8', '7', '+7']
+        if not any(indicator in message_lower for indicator in contact_indicators):
+            return True
+            
+    elif current_state == 'waiting_for_delivery_choice':
+        # Ожидаем выбор доставки
+        if not is_delivery_choice(message):
+            return True
+            
+    elif current_state == 'waiting_for_tnved':
+        # Ожидаем код ТНВЭД или "не знаю"
+        if not (doesnt_know_tnved(message) or re.match(r'^\d{4,10}', message)):
+            return True
+            
+    elif current_state == 'waiting_for_customs':
+        # Ожидаем стоимость в USD
+        cost_patterns = [r'\d+\s*(?:usd|\$|доллар)', r'стоимос\w*\s*\d+']
+        if not any(re.search(pattern, message_lower) for pattern in cost_patterns):
+            return True
+    
+    return False
 
 def get_missing_data(delivery_data, customs_data, delivery_type):
     """Определяет какие данные отсутствуют - ИСПРАВЛЕННАЯ ЛОГИКА"""
@@ -272,7 +311,7 @@ def extract_delivery_info(text):
             'общие товары': ['товары', 'товар', 'разное', 'прочее'],
             'игрушки': ['игрушки', 'игрушка', 'куклы', 'машинки', 'конструктор'],
             'электроника': ['электроника', 'телефон', 'ноутбук', 'планшет', 'компьютер'],
-            'вещи': ['вещи', 'вещь', 'личные вещи', 'груз']  # ИСПРАВЛЕНО: вечи → вещи
+            'вещи': ['вещи', 'вещь', 'личные вещи', 'груз']
         }
         
         # Сначала ищем точные совпадения
@@ -588,7 +627,6 @@ def get_gemini_response(user_message, context="", use_customs_model=False):
 def save_application(details):
     """Сохранение заявки"""
     try:
-        # ИСПРАВЛЕННАЯ СТРОКА: %Y-%m-%d вместо %Y-%m-d
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"Новая заявка: {timestamp}\n{details}\n"
         with open("applications.txt", "a", encoding="utf-8") as f: 
@@ -655,7 +693,7 @@ def chat():
             })
             return jsonify({"response": "🚚 Добро пожаловать в PostPro!\n\nЯ помогу вам рассчитать стоимость доставки из Китая в Казахстан.\n\n📦 **КАРГО** - для личных вещей и пробных партий\n📄 **ИНВОЙС** - для коммерческих партий с растаможкой\n\n💡 **Просто напишите:**\n• Вес груза (например: 50 кг)\n• Тип товара (одежда, электроника и т.д.)\n• Город доставки в Казахстане\n\n✨ **Примеры запросов:**\n\"50 кг одежды в Астану\"\n\"Карго 100 кг электроники в Алматы\"\n\"Инвойс 200 кг мебели в Шымкент 5000 USD\""})
         
-        # Приветствия - УБРАЛ ДУБЛИРОВАНИЕ
+        # Приветствия
         if user_message.lower() in GREETINGS and not any([waiting_for_contacts, waiting_for_customs, waiting_for_delivery_choice, waiting_for_tnved]):
             session.update({
                 'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None, 'delivery_option': None},
@@ -668,21 +706,36 @@ def chat():
             })
             return jsonify({"response": "🚚 Добро пожаловать в PostPro!\n\nЯ помогу вам рассчитать стоимость доставки из Китая в Казахстан.\n\n📦 **КАРГО** - для личных вещей и пробных партий\n📄 **ИНВОЙС** - для коммерческих партий с растаможкой\n\n💡 **Просто напишите:**\n• Вес груза (например: 50 кг)\n• Тип товара (одежда, электроника и т.д.)\n• Город доставки в Казахстане\n\n✨ **Примеры запросов:**\n\"50 кг одежды в Астану\"\n\"Карго 100 кг электроники в Алматы\"\n\"Инвойс 200 кг мебели в Шымкент 5000 USD\""})
         
+        # 🎯 УМНАЯ ОБРАБОТКА: Проверка на вопросы/команды на ЛЮБОМ этапе
+        
         # Обработка выбора доставки
-        if waiting_for_delivery_choice and is_delivery_choice(user_message):
-            delivery_option = parse_delivery_choice(user_message)
-            delivery_data['delivery_option'] = delivery_option
-            session['delivery_data'] = delivery_data
-            session['waiting_for_delivery_choice'] = False
+        if waiting_for_delivery_choice:
+            if is_unexpected_input(user_message, 'waiting_for_delivery_choice'):
+                response = get_gemini_response(user_message, "Клиент задает вопрос на этапе выбора доставки. Ответь кратко и вежливо, затем напомни о необходимости выбрать вариант доставки (1 или 2).")
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
             
-            final_response = show_final_calculation(delivery_data, customs_data, delivery_option)
-            session['waiting_for_contacts'] = True
-            chat_history.append(f"Ассистент: {final_response}")
-            session['chat_history'] = chat_history
-            return jsonify({"response": final_response})
+            if is_delivery_choice(user_message):
+                delivery_option = parse_delivery_choice(user_message)
+                delivery_data['delivery_option'] = delivery_option
+                session['delivery_data'] = delivery_data
+                session['waiting_for_delivery_choice'] = False
+                
+                final_response = show_final_calculation(delivery_data, customs_data, delivery_option)
+                session['waiting_for_contacts'] = True
+                chat_history.append(f"Ассистент: {final_response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": final_response})
         
         # Обработка контактов
         if waiting_for_contacts:
+            if is_unexpected_input(user_message, 'waiting_for_contacts'):
+                response = get_gemini_response(user_message, "Клиент задает вопрос на этапе оформления заявки. Ответь кратко и вежливо, затем напомни о необходимости ввести имя и телефон для завершения заявки.")
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+            
             name, phone = extract_contact_info(user_message)
             if name and phone:
                 session['waiting_for_contacts'] = False
@@ -729,8 +782,13 @@ def chat():
         
         # Обработка кода ТНВЭД
         if waiting_for_tnved:
+            if is_unexpected_input(user_message, 'waiting_for_tnved'):
+                response = get_gemini_response(user_message, "Клиент задает вопрос на этапе ввода кода ТНВЭД. Ответь кратко и вежливо, затем напомни о необходимости ввести код или написать 'не знаю'.")
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+            
             if doesnt_know_tnved(user_message):
-                # 🎯 ИСПРАВЛЕНИЕ: Не теряем product_type
                 product_type = delivery_data.get('product_type', 'общие товары')
                 tnved_code = get_tnved_code(product_type)
                 customs_data['tnved_code'] = tnved_code
@@ -777,6 +835,12 @@ def chat():
         
         # Обработка данных растаможки
         if waiting_for_customs:
+            if is_unexpected_input(user_message, 'waiting_for_customs'):
+                response = get_gemini_response(user_message, "Клиент задает вопрос на этапе ввода стоимости товара. Ответь кратко и вежливо, затем напомни о необходимости указать стоимость в USD.")
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+            
             invoice_value, tnved_code = extract_customs_info(user_message)
             
             if invoice_value:
@@ -921,7 +985,7 @@ def chat():
                     )
                     session['waiting_for_delivery_choice'] = True
         
-        # Если не удалось обработать - используем Gemini
+        # 🎯 УМНАЯ ОБРАБОТКА: Если не удалось обработать - используем Gemini
         if not response:
             context = f"История: {chat_history[-3:] if len(chat_history) > 3 else chat_history}"
             response = get_gemini_response(user_message, context)
