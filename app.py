@@ -615,17 +615,23 @@ def get_gemini_response(user_message, context="", use_customs_model=False):
     """Получение ответа от Gemini"""
     if not main_model:
         return "Сервис временно недоступен"
+    
     try:
-        model_to_use = customs_model if use_customs_model else main_model
-        full_prompt = f"Контекст: {context}\n\nСообщение: {user_message}\n\nОтвет:"
-        response = model_to_use.generate_content(full_prompt)
+        if use_customs_model and customs_model:
+            model = customs_model
+        else:
+            model = main_model
+            
+        prompt = f"Контекст: {context}\n\nСообщение пользователя: {user_message}"
+        response = model.generate_content(prompt)
         return response.text
+        
     except Exception as e:
         logger.error(f"Ошибка Gemini: {e}")
-        return "Извините, произошла ошибка. Попробуйте позже."
+        return "Извините, произошла ошибка при обработке запроса"
 
 def save_application(details):
-    """Сохранение заявки"""
+    """Сохранение заявки в файл"""
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = f"Новая заявка: {timestamp}\n{details}\n"
@@ -635,9 +641,15 @@ def save_application(details):
     except Exception as e: 
         logger.error(f"Ошибка сохранения: {e}")
 
-# --- ROUTES ---
-@app.route('/')
-def index(): 
+# --- МАРШРУТЫ FLASK ---
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    """Главная страница с чатом"""
+    if request.method == 'POST':
+        return handle_chat_message()
+    
+    # Инициализация сессии
     if 'delivery_data' not in session:
         session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None, 'delivery_option': None}
     if 'customs_data' not in session:
@@ -657,6 +669,53 @@ def index():
         initialize_models()
     
     return render_template('index.html')
+
+def handle_chat_message():
+    """Обработка сообщений чата"""
+    try:
+        user_message = request.json.get('message', '').strip()
+        if not user_message:
+            return jsonify({'response': 'Пожалуйста, введите сообщение'})
+        
+        # Обработка команды /start
+        if user_message.lower() in ['/start', 'старт', 'начать', 'start']:
+            session.clear()
+            session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'delivery_type': None, 'delivery_option': None}
+            session['customs_data'] = {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False, 'tnved_code': None}
+            session['chat_history'] = []
+            session['waiting_for_contacts'] = False
+            session['waiting_for_customs'] = False
+            session['waiting_for_delivery_choice'] = False
+            session['waiting_for_tnved'] = False
+            
+            return jsonify({
+                'response': '🔄 Начинаем новый расчет!\n\nРасскажите о вашем грузе:\n• Вес (в кг)\n• Тип товара\n• Город доставки\n\nНапример: "50 кг одежда в Астану"'
+            })
+        
+        # Используем существующую логику из функции /chat
+        # Для простоты перенаправляем в существующий маршрут
+        from flask import redirect, url_for
+        return redirect(url_for('chat'))
+        
+    except Exception as e:
+        logger.error(f"Ошибка обработки сообщения: {e}")
+        return jsonify({'response': 'Произошла ошибка. Пожалуйста, попробуйте еще раз.'})
+
+# --- ЗАПУСК ПРИЛОЖЕНИЯ ---
+
+if __name__ == '__main__':
+    if initialize_models():
+        # Получаем IP-адрес для доступа с других устройств
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        logger.info(f"=== PostPro Chat Bot запущен ===")
+        logger.info(f"Локальный доступ: http://localhost:5000")
+        logger.info(f"Сетевой доступ: http://{local_ip}:5000")
+        logger.info(f"=================================")
+        
+        app.run(host='0.0.0.0', port=5000, debug=True)
+    else:
+        logger.error("!!! Не удалось инициализировать модели Gemini")
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -1007,3 +1066,4 @@ def clear_chat():
 if __name__ == '__main__':
     initialize_models()
     app.run(host='0.0.0.0', port=5000, debug=True)
+
