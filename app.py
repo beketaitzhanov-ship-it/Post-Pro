@@ -259,7 +259,7 @@ def get_comparison_chart(t1_total: float, t2_total: float) -> str:
                 }},
                 plugins: {{ title: {{ display: true, text: 'Сравнение стоимости доставки' }} }}
             }}
-        });
+        }});
     </script>
 </body>
 </html>
