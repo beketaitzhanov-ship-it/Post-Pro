@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, session
 import os
 import re
+import json
 from datetime import datetime
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
@@ -19,39 +20,38 @@ app = Flask(__name__)
 app.secret_key = 'postpro-secret-key-2024'
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800
 
-# --- КОНСТАНТЫ И БАЗА ДАННЫХ ---
-DESTINATION_ZONES = {
-    "талдыкорган": 1, "конаев": 1, "текели": 1, "капчагай": 1, "есик": 1, "талгар": 1, "каскелен": 1, 
-    "жаркент": 1, "сарканд": 1, "аксу": 1, "алматы": 1, "алмата": 1,
-    "тараз": 2, "шымкент": 2, "туркестан": 2, "аулиеата": 2, "кордай": 2, "мерке": 2, "мойынкум": 2, 
-    "жанатас": 2, "каратау": 2, "шу": 2, "кент": 2,
-    "астана": 3, "кокшетау": 3, "степногорск": 3, "атбасар": 3, "ерементау": 3, "макинск": 3, 
-    "караганда": 3, "балхаш": 3, "темиртау": 3, "шахтинск": 3, "жезказган": 3, "сатпаев": 3, 
-    "кызылорда": 3, "казалынск": 3, "жанакорган": 3, "петропавловск": 3, "павлодар": 3, "экибастуз": 3, 
-    "костанай": 3, "рудный": 3, "семей": 3, "курчатов": 3, "аягоз": 3,
-    "актобе": 4, "хромтау": 4, "шалкар": 4, "уральск": 4, "аксай": 4, "чингирлау": 4,
-    "атырау": 5, "кульсары": 5, "актау": 5, "жанаозен": 5, "бейнеу": 5
-}
+# --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
+def load_config():
+    """Загружает конфигурацию из файла config.json."""
+    try:
+        with open('config.json', 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+            logger.info(">>> Файл config.json успешно загружен.")
+            return config_data
+    except FileNotFoundError:
+        logger.error("!!! КРИТИЧЕСКАЯ ОШИБКА: Файл config.json не найден!")
+        return None
+    except json.JSONDecodeError:
+        logger.error("!!! КРИТИЧЕСКАЯ ОШИБКА: Неверный формат данных в config.json!")
+        return None
+    except Exception as e:
+        logger.error(f"!!! КРИТИЧЕСКАЯ ОШИБКА при загрузке config.json: {e}")
+        return None
 
-EXCHANGE_RATE = 550
+config = load_config()
 
-# ТАРИФЫ
-T1_RATES = {  # Китай → Алматы (USD/кг)
-    "ткани": 1.70, "одежда": 1.70, "инструменты": 2.10, "общие товары": 2.40, "мебель": 2.10, 
-    "косметика": 2.30, "автозапчасти": 2.40, "малая техника": 2.50, "продукты": 2.70, 
-    "белье": 2.80, "лекарства": 2.90, "лекарсива": 2.90, "медикаменты": 2.90, "посуда": 2.20
-}
-
-T2_RATES = {  # Алматы → город назначения (тенге/кг)
-    "алматы": 120,     # Доставка по городу Алматы
-    1: 150,            # Зона 1 (Алматинская область)
-    2: 200,            # Зона 2 (Южный Казахстан)
-    3: 250,            # Зона 3 (Центральный и Северный Казахстан)
-    4: 350,            # Зона 4 (Западный Казахстан)
-    5: 450             # Зона 5 (Прикаспийский регион)
-}
-
-GREETINGS = ["привет", "здравствуй", "здравствуйте", "салем", "сәлем", "добрый день", "добрый вечер", "доброе утро"]
+if config:
+    EXCHANGE_RATE = config.get("EXCHANGE_RATE", 550)
+    DESTINATION_ZONES = config.get("DESTINATION_ZONES", {})
+    T1_RATES = config.get("T1_RATES", {})
+    T2_RATES = config.get("T2_RATES", {})
+    CUSTOMS_RATES = config.get("CUSTOMS_RATES", {})
+    CUSTOMS_FEES = config.get("CUSTOMS_FEES", {})
+    GREETINGS = config.get("GREETINGS", [])
+else:
+    # Завершить работу или использовать значения по умолчанию, если конфиг не загрузился
+    logger.error("!!! Приложение запускается с значениями по умолчанию из-за ошибки загрузки config.json")
+    EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS = 550, {}, {}, {}, {}, {}, []
 
 # --- СИСТЕМНЫЙ ПРОМПТ ---
 SYSTEM_INSTRUCTION = """
@@ -67,7 +67,7 @@ SYSTEM_INSTRUCTION = """
 
 3. **ОПЛАТА:**
    - У нас пост-оплата: вы платите при получении груза
-   - Форматы оплаты: безналичный расчет, наличные, Kaspi, Halyk, Freedom Bank
+   - Форматы оплата: безналичный расчет, наличные, Kaspi, Halyk, Freedom Bank
    - Если спрашивают про оплату - всегда объясняй эту систему
 
 4. **ЛОГИКА ДИАЛОГА:**
@@ -116,11 +116,11 @@ def calculate_quick_cost(weight: float, product_type: str, city: str):
         # Т2: Определяем тариф для города
         city_lower = city.lower()
         if city_lower == "алматы" or city_lower == "алмата":
-            t2_rate = T2_RATES["алматы"]  # Городской тариф
+            t2_rate = T2_RATES.get("алматы", 120)  # Городской тариф
             zone = "алматы"
         else:
             zone = DESTINATION_ZONES.get(city_lower, 3)
-            t2_rate = T2_RATES.get(zone, 250)
+            t2_rate = T2_RATES.get(str(zone), 250)
         
         t2_cost_kzt = weight * t2_rate
         
@@ -531,4 +531,3 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
