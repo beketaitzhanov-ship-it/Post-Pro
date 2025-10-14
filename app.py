@@ -1113,6 +1113,21 @@ def chat():
         
         chat_history.append(f"Клиент: {user_message}")
         
+        # === ДОБАВЬТЕ ЭТОТ КОД ЗДЕСЬ ===
+        # Проверяем доступность моделей
+        if main_model is None:
+            initialize_models()
+
+        # Если модели все еще недоступны, используем заглушку
+        if main_model is None:
+            fallback_response = get_fallback_response(user_message, delivery_data, customs_data)
+            chat_history.append(f"Ассистент: {fallback_response}")
+            session['chat_history'] = chat_history
+            return jsonify({"response": fallback_response})
+        # === КОНЕЦ ДОБАВЛЕННОГО КОДА ===
+
+        # Сброс по команде
+        if user_message.lower() in ['/start', 'сброс', 'начать заново', 'новый расчет']:        
         # Сброс по команде
         if user_message.lower() in ['/start', 'сброс', 'начать заново', 'новый расчет']:
             session.clear()
@@ -1463,5 +1478,6 @@ if __name__ == '__main__':
         app.run(host='0.0.0.0', port=5000, debug=True)
     else:
         logger.error("!!! Не удалось инициализировать модели Gemini")
+
 
 
