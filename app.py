@@ -43,15 +43,14 @@ config = load_config()
 if config:
     EXCHANGE_RATE = config.get("EXCHANGE_RATE", 550)
     DESTINATION_ZONES = config.get("DESTINATION_ZONES", {})
-    T1_RATES = config.get("T1_RATES", {})
+    T1_RATES_DENSITY = config.get("T1_RATES_DENSITY", {})
     T2_RATES = config.get("T2_RATES", {})
     CUSTOMS_RATES = config.get("CUSTOMS_RATES", {})
     CUSTOMS_FEES = config.get("CUSTOMS_FEES", {})
     GREETINGS = config.get("GREETINGS", [])
 else:
-    # Завершить работу или использовать значения по умолчанию, если конфиг не загрузился
     logger.error("!!! Приложение запускается с значениями по умолчанию из-за ошибки загрузки config.json")
-    EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS = 550, {}, {}, {}, {}, {}, []
+    EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS = 550, {}, {}, {}, {}, {}, []
 
 # --- СИСТЕМНЫЙ ПРОМПТ ---
 SYSTEM_INSTRUCTION = """
@@ -93,10 +92,8 @@ model = None
 try:
     if GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
-        # УБРАТЬ system_instruction из конструктора
         model = genai.GenerativeModel(
             model_name='models/gemini-2.0-flash'
-            # УДАЛИТЬ СТРОКУ: system_instruction=SYSTEM_INSTRUCTION
         )
         logger.info(">>> Модель Gemini успешно инициализирована.")
     else:
@@ -105,19 +102,62 @@ except Exception as e:
     logger.error(f"!!! Ошибка инициализации Gemini: {e}")
 
 # --- ФУНКЦИИ РАСЧЕТА ---
-def calculate_quick_cost(weight: float, product_type: str, city: str):
+def extract_dimensions(text):
+    """Извлекает габариты (длина, ширина, высота) из текста в метрах."""
+    pattern = r'(\d+(?:\.\d+)?)\s*[мmxх]?\s*(\d+(?:\.\d+)?)\s*[мmxх]?\s*(\d+(?:\.\d+)?)'
+    match = re.search(pattern, text.lower())
+    if match:
+        try:
+            return float(match.group(1)), float(match.group(2)), float(match.group(3))
+        except (ValueError, IndexError):
+            return None, None, None
+    return None, None, None
+
+def calculate_t1_cost_by_density(product_type, weight, volume):
+    """Рассчитывает стоимость Т1 на основе плотности, загружая правила из конфига."""
+    if not volume or volume <= 0:
+        return None
+
+    density = weight / volume
+    
+    rules = T1_RATES_DENSITY.get(product_type.lower())
+    if not rules:
+        rules = T1_RATES_DENSITY.get("мебель")
+
+    for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
+        if density >= rule['min_density']:
+            price = rule['price']
+            unit = rule['unit']
+            
+            if unit == "kg":
+                cost_usd = price * weight
+            elif unit == "m3":
+                cost_usd = price * volume
+            else:
+                cost_usd = price * weight 
+            
+            return cost_usd * EXCHANGE_RATE
+            
+    return None
+
+def calculate_quick_cost(weight: float, product_type: str, city: str, volume: float = None):
     """Быстрый расчет стоимости"""
     try:
-        # Т1: Китай → Алматы
+        # Т1: Китай → Алматы (НОВАЯ ЛОГИКА)
         product_type_lower = product_type.lower()
-        t1_rate = T1_RATES.get(product_type_lower, 2.40)
-        t1_cost_usd = weight * t1_rate
-        t1_cost_kzt = t1_cost_usd * EXCHANGE_RATE
+        
+        # НОВЫЙ РАСЧЕТ Т1
+        if volume:
+            t1_cost_kzt = calculate_t1_cost_by_density(product_type, weight, volume)
+            if t1_cost_kzt is None:
+                return None
+        else:
+            return None
         
         # Т2: Определяем тариф для города
         city_lower = city.lower()
         if city_lower == "алматы" or city_lower == "алмата":
-            t2_rate = T2_RATES.get("алматы", 120)  # Городской тариф
+            t2_rate = T2_RATES.get("алматы", 120)
             zone = "алматы"
         else:
             zone = DESTINATION_ZONES.get(city_lower, 3)
@@ -139,9 +179,9 @@ def calculate_quick_cost(weight: float, product_type: str, city: str):
         logger.error(f"Ошибка расчета: {e}")
         return None
 
-def calculate_detailed_cost(weight: float, product_type: str, city: str):
+def calculate_detailed_cost(weight: float, product_type: str, city: str, volume: float = None):
     """Детальный расчет с разбивкой"""
-    quick_cost = calculate_quick_cost(weight, product_type, city)
+    quick_cost = calculate_quick_cost(weight, product_type, city, volume)
     if not quick_cost:
         return "Ошибка расчета"
     
@@ -150,10 +190,6 @@ def calculate_detailed_cost(weight: float, product_type: str, city: str):
     total = quick_cost['total']
     zone = quick_cost['zone']
     t2_rate = quick_cost['t2_rate']
-    
-    # Находим актуальную ставку Т1
-    product_type_lower = product_type.lower()
-    t1_rate = T1_RATES.get(product_type_lower, 2.40)
     
     # Определяем текст для Т2 в зависимости от города
     city_name = city.capitalize()
@@ -170,8 +206,8 @@ def calculate_detailed_cost(weight: float, product_type: str, city: str):
         f"📊 **Детальный расчет для {weight} кг «{product_type}» в г. {city_name}:**\n\n"
         f"**Т1: Доставка из Китая до Алматы**\n"
         f"• До склада в Алматы (самовывоз)\n"
-        f"• ${t1_rate}/кг × {weight} кг = ${weight * t1_rate:.2f} USD\n"
-        f"• По курсу {EXCHANGE_RATE} тенге/$ = {t1_cost:.0f} тенге\n\n"
+        f"• Расчет по плотности груза\n"
+        f"• Итоговая стоимость Т1 = {t1_cost:.0f} тенге\n\n"
         f"**Т2: Доставка до двери ({zone_text})**\n"
         f"{t2_explanation}\n"
         f"• {t2_rate} тенге/кг × {weight} кг = {t2_cost:.0f} тенге\n\n"
@@ -195,6 +231,7 @@ def explain_tariffs():
 • Доставка из Китая до нашего сортировочного склада в Алматы
 • Вы забираете груз самовывозом со склада
 • ТОЛЬКО склад в Алматы, без доставки по городу
+• **НОВОЕ:** Расчет по плотности груза (вес/объем)
 
 **Т2 - Доставка до двери:**
 • Доставка из Китая + доставка до вашего адреса в ЛЮБОМ городе Казахстана
@@ -247,7 +284,6 @@ def get_gemini_response(user_message, context=""):
         return "Сервис временно недоступен"
     
     try:
-        # ДОБАВИТЬ системный промпт в начало сообщения
         full_prompt = f"{SYSTEM_INSTRUCTION}\n\nКонтекст: {context}\n\nСообщение: {user_message}\n\nОтвет:"
         response = model.generate_content(
             full_prompt,
@@ -287,15 +323,22 @@ def extract_delivery_info(text):
                 city = city_name
                 break
         
-        # Поиск типа товара
+        # Поиск типа товара (расширенные категории)
         product_keywords = {
-            'одежда': ['одежда', 'адежда', 'одежд'],
-            'лекарства': ['лекарства', 'лекарсива', 'медикаменты'],
-            'косметика': ['косметика', 'крем', 'шампунь', 'макияж'],
-            'техника': ['техника', 'телефон', 'ноутбук', 'гаджет'],
-            'мебель': ['мебель', 'стол', 'стул', 'кровать'],
-            'посуда': ['посуда', 'тарелки', 'чашки'],
-            'общие товары': ['товары', 'товар', 'разное', 'прочее']
+            'мебель': ['мебель', 'стол', 'стул', 'кровать', 'шкаф', 'диван'],
+            'автозапчасти': ['автозапчасти', 'запчасти', 'аксессуары авто', 'авто'],
+            'аксессуары': ['аксессуары', 'сумк', 'ремен', 'очки', 'украшен'],
+            'техника': ['техника', 'телефон', 'ноутбук', 'гаджет', 'электроника'],
+            'продукты': ['продукты', 'еда', 'питание', 'напитки'],
+            'ткани': ['ткани', 'текстиль', 'материал'],
+            'инструменты': ['инструменты', 'инструмент', 'оборудование'],
+            'белье': ['белье', 'бельё', 'белья', 'белью'],
+            'игрушки': ['игрушки', 'игрушк', 'игра'],
+            'одежда': ['одежда', 'адежда', 'одежд', 'костюм', 'платье'],
+            'лекарства': ['лекарства', 'лекарсива', 'медикаменты', 'препарат'],
+            'косметика': ['косметика', 'крем', 'шампунь', 'макияж', 'парфюм'],
+            'посуда': ['посуда', 'тарелки', 'чашки', 'кухонная утварь'],
+            'общие товары': ['товары', 'товар', 'разное', 'прочее', 'прочие']
         }
         
         for prod_type, keywords in product_keywords.items():
@@ -313,7 +356,6 @@ def extract_contact_info(text):
     name = None
     phone = None
     
-    # Удаляем лишние пробелы и приводим к нижнему регистру
     clean_text = re.sub(r'\s+', ' ', text.strip()).lower()
     
     # Поиск имени (первое слово из 2+ русских/английских букв)
@@ -323,29 +365,25 @@ def extract_contact_info(text):
     
     # Поиск телефона (разные форматы)
     phone_patterns = [
-        r'(\d{10,11})',  # 87057600909
-        r'(\d{3}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})',  # 870 576 00 909
-        r'(\d{3}[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{3})',  # 870 57 600 909
+        r'(\d{10,11})',
+        r'(\d{3}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2})',
+        r'(\d{3}[\s\-]?\d{2}[\s\-]?\d{2}[\s\-]?\d{3})',
     ]
     
     for pattern in phone_patterns:
         phone_match = re.search(pattern, clean_text)
         if phone_match:
             phone = re.sub(r'\D', '', phone_match.group(1))
-            # Нормализация номера
             if phone.startswith('8'):
                 phone = '7' + phone[1:]
             elif len(phone) == 10:
                 phone = '7' + phone
             break
     
-    # Если нашли и имя и телефон - возвращаем
     if name and phone and len(phone) >= 10:
         return name, phone
     
-    # Если есть только телефон, пробуем найти имя в тексте
     if phone and not name:
-        # Ищем имя перед запятой или в начале текста
         name_before_comma = re.search(r'^([а-яa-z]+)\s*[,]', clean_text)
         if name_before_comma:
             name = name_before_comma.group(1).capitalize()
@@ -356,7 +394,7 @@ def extract_contact_info(text):
 @app.route('/')
 def index(): 
     if 'delivery_data' not in session:
-        session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None}
+        session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'volume': None}
     if 'chat_history' not in session:
         session['chat_history'] = []
     if 'waiting_for_contacts' not in session:
@@ -371,7 +409,7 @@ def chat():
             return jsonify({"response": "Пожалуйста, введите сообщение."})
         
         # Инициализация сессий
-        delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None})
+        delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None, 'volume': None})
         chat_history = session.get('chat_history', [])
         waiting_for_contacts = session.get('waiting_for_contacts', False)
         
@@ -380,18 +418,17 @@ def chat():
         # Приветствия
         if user_message.lower() in GREETINGS:
             session.update({
-                'delivery_data': {'weight': None, 'product_type': None, 'city': None},
+                'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None},
                 'chat_history': [f"Клиент: {user_message}"],
                 'waiting_for_contacts': False
             })
-            return jsonify({"response": "Привет! 👋 Я ассистент Post Pro. Помогу рассчитать доставку из Китая в Казахстан! Укажите вес, тип товара и город доставки."})
+            return jsonify({"response": "Привет! 👋 Я ассистент Post Pro. Помогу рассчитать доставку из Китая в Казахстан!\n\n📦 **Для расчета укажите:**\n• Вес груза (в кг)\n• Тип товара\n• Город доставки\n• Габариты (Д×Ш×В в метрах)\n\n💡 **Пример:** \"50 кг мебель в Астану, габариты 1.2×0.8×0.5\""})
         
         # Если ждем контакты
         if waiting_for_contacts:
             name, phone = extract_contact_info(user_message)
             
             if name and phone:
-                # Формируем детали заявки
                 details = f"Имя: {name}, Телефон: {phone}"
                 if delivery_data['weight']:
                     details += f", Вес: {delivery_data['weight']} кг"
@@ -399,19 +436,19 @@ def chat():
                     details += f", Товар: {delivery_data['product_type']}"
                 if delivery_data['city']:
                     details += f", Город: {delivery_data['city']}"
+                if delivery_data.get('volume'):
+                    details += f", Объем: {delivery_data['volume']} м³"
                 
                 save_application(details)
                 
-                # Очищаем сессию
                 session.update({
-                    'delivery_data': {'weight': None, 'product_type': None, 'city': None},
+                    'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None},
                     'chat_history': [],
                     'waiting_for_contacts': False
                 })
                 
                 return jsonify({"response": "🎉 Спасибо, что выбрали Post Pro! Менеджер свяжется с вами в течение 15 минут. 📞"})
             else:
-                # Если не распознали - уточняем
                 return jsonify({"response": "Не удалось распознать контакты. Пожалуйста, укажите в формате: 'Имя, 87001234567'"})
         
         # Запросы об оплате
@@ -437,23 +474,37 @@ def chat():
         
         # Извлечение данных о доставке
         weight, product_type, city = extract_delivery_info(user_message)
+        length, width, height = extract_dimensions(user_message)
+
         if weight:
             delivery_data['weight'] = weight
         if product_type:
             delivery_data['product_type'] = product_type
         if city:
             delivery_data['city'] = city
+        if length and width and height:
+            delivery_data['length'] = length
+            delivery_data['width'] = width  
+            delivery_data['height'] = height
+            delivery_data['volume'] = length * width * height
         
         # ПРОВЕРЯЕМ - ЕСЛИ ВОПРОС НЕ О ДОСТАВКЕ, ТО ПЕРЕДАЕМ В GEMINI
         is_delivery_question = any(word in user_message.lower() for word in [
             'вес', 'кг', 'город', 'доставк', 'тариф', 'стоимос', 'расчет', 'цена',
-            'сколько', 'стоит', 'посчитай', 'рассчитай', 'т1', 'т2', 'да', 'yes'
+            'сколько', 'стоит', 'посчитай', 'рассчитай', 'т1', 'т2', 'да', 'yes',
+            'габарит', 'объем', 'плотност'
         ])
 
         # Если есть данные о доставке И вопрос о доставке - показываем расчет
         if delivery_data['weight'] and delivery_data['city'] and is_delivery_question:
             if not delivery_data['product_type']:
                 delivery_data['product_type'] = "общие товары"
+            
+            # ПРОВЕРКА НАЛИЧИЯ ГАБАРИТОВ
+            if not delivery_data.get('volume'):
+                session['delivery_data'] = delivery_data
+                session['chat_history'] = chat_history
+                return jsonify({"response": "📏 Для точного расчета стоимости Т1 укажите габариты груза (длина × ширина × высота в метрах).\n\n💡 **Примеры форматов:**\n• \"50×40×30\"\n• \"1.2м 0.8м 0.5м\"\n• \"120×80×50 см\""})
             
             # СНАЧАЛА проверяем запрос на детальный расчет
             wants_detailed = any(word in user_message.lower() for word in [
@@ -464,7 +515,8 @@ def chat():
                 detailed_response = calculate_detailed_cost(
                     delivery_data['weight'], 
                     delivery_data['product_type'], 
-                    delivery_data['city']
+                    delivery_data['city'],
+                    delivery_data.get('volume')
                 )
                 session['delivery_data'] = delivery_data
                 session['chat_history'] = chat_history
@@ -474,13 +526,15 @@ def chat():
             quick_cost = calculate_quick_cost(
                 delivery_data['weight'], 
                 delivery_data['product_type'], 
-                delivery_data['city']
+                delivery_data['city'],
+                delivery_data.get('volume')
             )
             
             if quick_cost:
                 quick_response = (
                     f"🚚 **Быстрый расчет:**\n"
                     f"• {delivery_data['weight']} кг «{delivery_data['product_type']}» в {delivery_data['city'].capitalize()}\n"
+                    f"• Объем: {delivery_data['volume']:.2f} м³\n"
                     f"• 💰 Примерная стоимость: **~{quick_cost['total']:.0f} тенге**\n\n"
                     f"📊 Хотите детальный расчет с разбивкой по тарифам?"
                 )
@@ -488,6 +542,8 @@ def chat():
                 session['delivery_data'] = delivery_data
                 session['chat_history'] = chat_history
                 return jsonify({"response": quick_response})
+            else:
+                return jsonify({"response": "❌ Не удалось рассчитать стоимость. Проверьте правильность введенных данных."})
         
         # Контекст для ИИ
         context_lines = []
@@ -503,6 +559,8 @@ def chat():
             context_lines.append(f"- Товар: {delivery_data['product_type']}")
         if delivery_data['city']:
             context_lines.append(f"- Город: {delivery_data['city']}")
+        if delivery_data.get('volume'):
+            context_lines.append(f"- Объем: {delivery_data['volume']:.2f} м³")
         
         context = "\n".join(context_lines)
         bot_response = get_gemini_response(user_message, context)
@@ -533,7 +591,3 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
-
-
-
