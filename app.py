@@ -268,7 +268,7 @@ def extract_delivery_info(text):
     city = None
     
     try:
-        # Поиск веса
+        # Поиск веса (существующий код)
         weight_patterns = [
             r'(\d+(?:\.\d+)?)\s*(?:кг|kg|килограмм|кило)',
             r'вес\s*[:\-]?\s*(\d+(?:\.\d+)?)',
@@ -280,14 +280,14 @@ def extract_delivery_info(text):
                 weight = float(match.group(1))
                 break
         
-        # Поиск города
+        # Поиск города (существующий код)
         text_lower = text.lower()
         for city_name in DESTINATION_ZONES:
             if city_name in text_lower:
                 city = city_name
                 break
         
-        # Поиск типа товара
+        # Поиск типа товара (существующий код)
         product_keywords = {
             'одежда': ['одежда', 'адежда', 'одежд'],
             'лекарства': ['лекарства', 'лекарсива', 'медикаменты'],
@@ -533,5 +533,6 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
