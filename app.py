@@ -93,9 +93,10 @@ model = None
 try:
     if GEMINI_API_KEY:
         genai.configure(api_key=GEMINI_API_KEY)
+        # УБРАТЬ system_instruction из конструктора
         model = genai.GenerativeModel(
-            model_name='models/gemini-2.0-flash',
-            system_instruction=SYSTEM_INSTRUCTION
+            model_name='models/gemini-2.0-flash'
+            # УДАЛИТЬ СТРОКУ: system_instruction=SYSTEM_INSTRUCTION
         )
         logger.info(">>> Модель Gemini успешно инициализирована.")
     else:
@@ -531,3 +532,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
