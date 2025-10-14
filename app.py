@@ -837,38 +837,34 @@ def chat():
                 return jsonify({"response": response_message})
         
         # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
-        if has_all_data and not calculation_shown:
-            # Производим расчет
-            quick_cost = calculate_quick_cost(
-                delivery_data['weight'], 
-                delivery_data['product_type'], 
-                delivery_data['city'],
-                delivery_data.get('volume')
-            )
-            
-            if quick_cost:
-                # Показываем итоговую стоимость
-                total_cost = quick_cost['total']
-                response_message = (
-                    f"✅ **Все данные получены!**\n\n"
-                    f"📦 **Параметры груза:**\n"
-                    f"• Вес: {delivery_data['weight']} кг\n"
-                    f"• Товар: {delivery_data['product_type']}\n"
-                    f"• Объем: {delivery_data['volume']:.3f} м³\n"
-                    f"• Город: {delivery_data['city'].capitalize()}\n\n"
-                    f"💰 **Примерная стоимость доставки:** ~**{total_cost:,.0f} ₸**\n\n"
-                    f"📊 Хотите увидеть детальный расчет с разбивкой по тарифам?"
-                )
-                
-                # Сохраняем результат расчета в сессии
-                session['quick_cost'] = quick_cost
-                session['calculation_shown'] = True
-                session['delivery_data'] = delivery_data
-                session['chat_history'] = chat_history
-                
-                return jsonify({"response": response_message})
-            else:
-                return jsonify({"response": "❌ Не удалось рассчитать стоимость. Проверьте правильность введенных данных."})
+if has_all_data and not calculation_shown:
+    # Производим расчет
+    quick_cost = calculate_quick_cost(
+        delivery_data['weight'], 
+        delivery_data['product_type'], 
+        delivery_data['city'],
+        delivery_data.get('volume')
+    )
+    
+    if quick_cost:
+        # Сразу показываем детальный расчет вместо вопроса
+        detailed_response = calculate_detailed_cost(
+            quick_cost,
+            delivery_data['weight'], 
+            delivery_data['product_type'], 
+            delivery_data['city']
+        )
+        
+        # Сохраняем результат расчета в сессии
+        session['quick_cost'] = quick_cost
+        session['calculation_shown'] = True
+        session['waiting_for_contacts'] = True  # Сразу переходим к сбору контактов
+        session['delivery_data'] = delivery_data
+        session['chat_history'] = chat_history
+        
+        return jsonify({"response": detailed_response})
+    else:
+        return jsonify({"response": "❌ Не удалось рассчитать стоимость. Проверьте правильность введенных данных."})
         
         # Обработка после показа расчета
         if calculation_shown:
@@ -933,4 +929,5 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
