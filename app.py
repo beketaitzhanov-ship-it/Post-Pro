@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, render_template
 from flask_session import Session
 import re
 import logging
@@ -20,6 +20,12 @@ Session(app)
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# МАРШРУТ ДЛЯ ГЛАВНОЙ СТРАНИЦЫ (РЕШЕНИЕ ПРОБЛЕМЫ "NOT FOUND")
+@app.route('/')
+def index():
+    """Отдает главную страницу index.html."""
+    return render_template('index.html')
 
 # Константы
 EXCHANGE_RATE = 550  # ₸/USD
@@ -213,7 +219,7 @@ def get_welcome_message(lang: str = 'ru') -> tuple:
         "✨ **Примеры запросов:**\n"
         "\"50 кг одежды в Астану, объем 0.5 м³\"\n"
         "\"Карго 100 кг электроники в Алматы, габариты 120x80x60 см\"\n"
-        "\"Инвойс 200 кг мебели в Шымкент 5000 USD, объем 2.5 м³\"\n\n"
+        "\"Инвойс 200 кг мебели в ШымкENT 5000 USD, объем 2.5 м³\"\n\n"
         "💎 *Расчет производится по плотности груза для оптимальной стоимости*"
     ), [
         {'text': 'Русский', 'callback_data': 'lang_ru'},
@@ -393,7 +399,7 @@ def generate_pdf_report(delivery_data: dict, customs_data: dict, client_name: st
     \\item \\textbf{{{l['phone']}}}: +7 ({client_phone[:3]}) {client_phone[3:6]}-{client_phone[6:8]}-{client_phone[8:10]}
     \\item \\textbf{{{l['delivery_type']}}}: {'ИНВОЙС' if customs_data.get('invoice_value') else 'КАРГО'}
     \\item \\textbf{{{l['weight']}}}: {delivery_data['weight']} кг
-    \\item \\textbf{{{l['volume']}}}: {delivery_data['volume']} м³ ({l['density']}: {delivery_data['density']:.1f} кг/м³)
+    \\item \\textbf{{{l['volume']}}}: {delivery_data['volume']} м³ ({l['density']}: {delivery_data.get('density', 0):.1f} кг/м³)
     \\item \\textbf{{{l['product_type']}}}: {delivery_data['product_type']}
     \\item \\textbf{{{l['city']}}}: {delivery_data['city'].capitalize()}{city_suffix}
     \\item \\textbf{{{l['invoice_value']}}}: {customs_data.get('invoice_value', '–')} USD
@@ -404,8 +410,8 @@ def generate_pdf_report(delivery_data: dict, customs_data: dict, client_name: st
 \\begin{{itemize}}[leftmargin=*]
     \\item \\textbf{{{l['delivery']} ({delivery_label})}}: {total_cost - customs_data.get('total_kzt', 0):,.0f} ₸
     \\begin{{itemize}}
-        \\item T1 ({'до Алматы' if language == 'ru' else 'Алматыға' if language == 'kz' else '到阿拉木图'}): {delivery_data['t1_cost'] * 1.20:,.0f} ₸ ({delivery_data['t1_rate']:.2f} USD/{delivery_data['unit']})
-        {'\\item T2 (' + ('до двери' if language == 'ru' else 'есікке дейін' if language == 'kz' else '到门') + f'): {delivery_data["t2_cost"] * (1.5 if delivery_data.get("is_fragile") else 1.0) * (2.0 if delivery_data.get("is_village") else 1.0) * 1.20:,.0f} ₸ (зона {delivery_data["zone"]}, {delivery_data["t2_rate"]:.0f} ₸/кг' + (' × 1.5 (' + l['fragile'].split(':')[0] + ')' if delivery_data.get('is_fragile') else '') + (' × 2.0 (' + l['village'].split(':')[0] + ')' if delivery_data.get('is_village') else '') + ')' if delivery_data['delivery_option'] == '2' else ''}
+        \\item T1 ({'до Алматы' if language == 'ru' else 'Алматыға' if language == 'kz' else '到阿拉木图'}): {delivery_data.get('t1_cost', 0) * 1.20:,.0f} ₸ ({delivery_data.get('t1_rate', 0):.2f} USD/{delivery_data.get('unit', 'kg')})
+        {'\\item T2 (' + ('до двери' if language == 'ru' else 'есікке дейін' if language == 'kz' else '到门') + f'): {delivery_data.get("t2_cost", 0) * (1.5 if delivery_data.get("is_fragile") else 1.0) * (2.0 if delivery_data.get("is_village") else 1.0) * 1.20:,.0f} ₸ (зона {delivery_data.get("zone", 4)}, {delivery_data.get("t2_rate", 0):.0f} ₸/кг' + (' × 1.5 (' + l['fragile'].split(':')[0] + ')' if delivery_data.get('is_fragile') else '') + (' × 2.0 (' + l['village'].split(':')[0] + ')' if delivery_data.get('is_village') else '') + ')' if delivery_data.get('delivery_option') == '2' else ''}
     \\end{{itemize}}
     \\item \\textbf{{{l['customs']}}}: {customs_data.get('total_kzt', 0):,.0f} ₸
     \\begin{{itemize}}
@@ -577,7 +583,7 @@ def get_customs_full_calculation(delivery_data: dict, customs_data: dict, langua
     needs_certificate = check_certification_requirements(delivery_data['product_type'])
     customs_cost = calculate_customs_cost(
         customs_data['invoice_value'], delivery_data['product_type'],
-        delivery_data['weight'], customs_data['has_certificate'], needs_certificate
+        delivery_data['weight'], customs_data.get('has_certificate', False), needs_certificate
     )
     delivery_cost = calculate_quick_cost(
         delivery_data['weight'], delivery_data['product_type'], delivery_data['city'],
@@ -904,6 +910,10 @@ def chat():
         
         # Расчет для ИНВОЙС
         else:
+            # Сначала проверим, хватает ли данных для инвойса
+            if not customs_data.get('invoice_value'):
+                 return jsonify({"response": "Для расчета ИНВОЙСА, пожалуйста, укажите стоимость в USD."})
+
             customs_data['tnved_code'] = get_tnved_code(delivery_data['product_type'])
             needs_cert = check_certification_requirements(delivery_data['product_type'])
             
@@ -947,3 +957,4 @@ if __name__ == '__main__':
     logger.info(f"=================================")
     
     app.run(host='0.0.0.0', port=5000, debug=True)
+
