@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
+app.config['SECRET_KEY'] = 'postpro-secret-key-2024'
 app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
 
@@ -180,18 +180,18 @@ def get_welcome_message(lang: str = 'ru') -> tuple:
             "您好！PostPro 帮助您计算从中国到哈萨克斯坦的运输费用。\n\n"
             "📦 **货运** - 适用于个人物品和小批量试货\n"
             "📄 **发票** - 适用于需要清关的商业批次\n\n"
-            "💡 **请提供以下信息：**\n"
-            "• 货物重量（例如：50 公斤）\n"
+            "💡 **请提供以下信息:**\n"
+            "• 货物重量（例如：50 公斤)\n"
             "• 货物体积（立方米）或尺寸（长×宽×高，厘米）\n"
             "• 商品类型（服装、电子产品等）\n"
             "• 哈萨克斯坦的送货城市\n"
             "• 发票：美元金额\n"
             "• 易碎货物或乡村送货（如适用）\n\n"
-            "✨ **请求示例：**\n"
+            "✨ **请求示例:**\n"
             "\"50 公斤服装到阿斯塔纳，体积 0.5 立方米\"\n"
-            "\"货运 100 公斤电子产品到阿拉木图，尺寸 120x80x60 厘米\"\n"
-            "\"发票 200 公斤家具到奇姆肯特 5000 美元，体积 2.5 立方米，易碎\"\n\n"
-            "💬 为更改语言，请选择下面的按钮。"
+            "\"货运 100 公斤电子产品到阿拉木图, 尺寸 120x80x60 厘米\"\n"
+            "\"发票 200 公斤家具到奇姆肯特 5000 美元, 体积 2.5 立方米, 易碎\"\n\n"
+            "💬 为更改语言, 请选择下面的按钮."
         ), [
             {'text': 'Русский', 'callback_data': 'lang_ru'},
             {'text': 'Қазақша', 'callback_data': 'lang_kz'},
@@ -202,18 +202,16 @@ def get_welcome_message(lang: str = 'ru') -> tuple:
         "Я помогу вам рассчитать стоимость доставки из Китая в Казахстан.\n\n"
         "📦 **КАРГО** - для личных вещей и пробных партий\n"
         "📄 **ИНВОЙС** - для коммерческих партий с растаможкой\n\n"
-        "💡 **Просто напишите:**\n"
+        "💡 **Для расчета укажите:**\n"
         "• Вес груза (например: 50 кг)\n"
         "• Объем груза (м³) или габариты (Д×Ш×В в см)\n"
         "• Тип товара (одежда, электроника и т.д.)\n"
-        "• Город доставки в Казахстане\n"
-        "• Для ИНВОЙС: стоимость в USD\n"
-        "• Хрупкий груз или доставка в деревню (если применимо)\n\n"
+        "• Город доставки в Казахстане\n\n"
         "✨ **Примеры запросов:**\n"
         "\"50 кг одежды в Астану, объем 0.5 м³\"\n"
         "\"Карго 100 кг электроники в Алматы, габариты 120x80x60 см\"\n"
-        "\"Инвойс 200 кг мебели в Шымкент 5000 USD, объем 2.5 м³, хрупкий\"\n\n"
-        "💬 Для смены языка выберите кнопку ниже."
+        "\"Инвойс 200 кг мебели в Шымкент 5000 USD, объем 2.5 м³\"\n\n"
+        "💎 *Расчет производится по плотности груза для оптимальной стоимости*"
     ), [
         {'text': 'Русский', 'callback_data': 'lang_ru'},
         {'text': 'Қазақша', 'callback_data': 'lang_kz'},
@@ -565,8 +563,8 @@ def get_customs_full_calculation(delivery_data: dict, customs_data: dict, langua
             't2_desc': '送货至您的地址',
             'additional': '附加信息',
             'service_fee': '服务费: 20% (已包含在送货费用中)',
-            'fragile': '易碎货物：已考虑 (+50% T2)',
-            'village': '乡村送货：已考虑 (+100% T2)',
+            'fragile': '易碎货物: 已考虑 (+50% T2)',
+            'village': '乡村送货: 已考虑 (+100% T2)',
             'choose': '请输入“1”或“2”选择送货方式'
         }
     }
@@ -677,7 +675,7 @@ def extract_delivery_info(message: str, delivery_data: dict, language: str = 'ru
             length, width, height = map(float, dimensions_match.groups()[:3])
             delivery_data['volume'] = (length * width * height) / 1000000
         else:
-            missing_fields.append('объем груза (м³) или габариты (Д×Ш×В в см)' if language == 'ru' else 'жүктің көлемі (м³) немесе өлшемдері (Ұ×Е×Б см-де)' if language == 'kz' else '货物体积 (立方米) 或尺寸 (长×宽×高，厘米)')
+            missing_fields.append('объем груза (м³) или габариты (Д×Ш×В в см)' if language == 'ru' else 'жүктің көлемі (м³) немесе өлшемдері (Ұ×Е×Б см-де)' if language == 'kz' else '货物体积 (立方米) или尺寸 (长×宽×高，厘米)')
     
     if not customs_data.get('invoice_value') and re.search(r'инвойс|invoice|发票', message, re.IGNORECASE):
         invoice_match = re.search(r'(\d+\.?\d*)\s*(usd|美元)', message, re.IGNORECASE)
@@ -757,195 +755,273 @@ def chat():
             session['chat_history'] = chat_history
             return jsonify({"response": message, "keyboard": keyboard})
         
-        # Обработка контактов и email
+        # Обработка контактов
         if waiting_for_contacts:
-            contact_match = re.search(r'(.+),\s*(\d{10})\s*,?\s*([\w\.-]+@[\w\.-]+)', user_message)
-            if contact_match:
-                client_name, client_phone, client_email = contact_match.groups()
-                latex_content = generate_pdf_report(delivery_data, customs_data, client_name, client_phone,
-                                                  session['total_cost'], language)
-                pdf_path = generate_pdf_file(latex_content)
-                if pdf_path and send_pdf_email(client_name, client_email, pdf_path, language):
-                    response = (
-                        f"🤖 ✅ {'Заявка оформлена' if language == 'ru' else 'Тапсырыс рәсімделді' if language == 'kz' else '订单已确认'}, {client_name}!\n\n"
-                        f"📋 **{'Детали заявки' if language == 'ru' else 'Тапсырыс мәліметтері' if language == 'kz' else '订单详情'}**:\n"
-                        f"• {'Тип' if language == 'ru' else 'Түрі' if language == 'kz' else '类型'}: {'ИНВОЙС' if customs_data.get('invoice_value') else 'КАРГО'}\n"
-                        f"• {'Вес' if language == 'ru' else 'Салмағы' if language == 'kz' else '重量'}: {delivery_data['weight']} кг\n"
-                        f"• {'Объем' if language == 'ru' else 'Көлемі' if language == 'kz' else '体积'}: {delivery_data['volume']} м³\n"
-                        f"• {'Товар' if language == 'ru' else 'Товар' if language == 'kz' else '商品'}: {delivery_data['product_type']}\n"
-                        f"• {'Город' if language == 'ru' else 'Жеткізу қаласы' if language == 'kz' else '送货城市'}: {delivery_data['city'].capitalize()}{city_suffix}\n"
-                        f"• {'Доставка' if language == 'ru' else 'Жеткізу' if language == 'kz' else '送货方式'}: {'до двери' if delivery_data['delivery_option'] == '2' else 'самовывоз'}\n"
-                        f"• {'Стоимость инвойса' if language == 'ru' else 'Инвойс құны' if language == 'kz' else '发票金额'}: {customs_data.get('invoice_value', '–')} USD\n"
-                        f"• {'Код ТНВЭД' if language == 'ru' else 'ТН ВЭД коды' if language == 'kz' else 'HS编码'}: {customs_data.get('tnved_code', '–')}\n"
-                        f"• {'Итоговая стоимость' if language == 'ru' else 'Жалпы құны' if language == 'kz' else '总费用'}: {session['total_cost']:,.0f} ₸\n\n"
-                        f"📄 **{'Отчет отправлен на' if language == 'ru' else 'Есеп жіберілді' if language == 'kz' else '报告已发送至'} {client_email}**\n\n"
-                        f"📞 {'Мы свяжемся с вами по телефону' if language == 'ru' else 'Сізбен телефон арқылы хабарласамыз' if language == 'kz' else '我们将通过电话与您联系'} +7 ({client_phone[:3]}) {client_phone[3:6]}-{client_phone[6:8]}-{client_phone[8:10]} {'в течение 15 минут' if language == 'ru' else '15 минут ішінде' if language == 'kz' else '在15分钟内'}.\n\n"
-                        f"🔄 {'Для нового расчета напишите «старт»' if language == 'ru' else 'Жаңа есептеу үшін «старт» деп жазыңыз' if language == 'kz' else '为进行新计算，请输入“start”'}."
-                    )
-                    chat_history.append(f"Клиент: {user_message}")
-                    chat_history.append(f"Ассистент: {response}")
-                    session.update({
-                        'waiting_for_contacts': False,
-                        'chat_history': chat_history,
-                        'total_cost': None
-                    })
-                    return jsonify({"response": response})
-                else:
-                    return jsonify({"response": f"{'Ошибка отправки отчета. Попробуйте снова.' if language == 'ru' else 'Есепті жіберу қатесі. Қайтадан көріңіз.' if language == 'kz' else '发送报告失败。请重试。'}"})
-            return jsonify({"response": f"{'Пожалуйста, укажите имя, телефон и email (например: Айгуль, 87771234567, aygul@example.com)' if language == 'ru' else 'Атыңызды, телефоныңызды және email-ді көрсетіңіз (мысалы: Айгүл, 87771234567, aygul@example.com)' if language == 'kz' else '请提供姓名、电话和电子邮件 (例如: Айгуль, 87771234567, aygul@example.com)'}"}
-        )
+            name, phone = extract_contact_info(user_message)
+            if name and phone:
+                session['waiting_for_contacts'] = False
+                
+                # Сохранение заявки
+                app_details = f"Тип: {delivery_data['delivery_type']}\nВес: {delivery_data['weight']} кг\nТовар: {delivery_data['product_type']}\nГород: {delivery_data['city']}\nДоставка: {delivery_data['delivery_option']}\nИмя: {name}\nТелефон: {phone}\n"
+                if delivery_data['delivery_type'] == 'INVOICE':
+                    app_details += f"Стоимость инвойса: {customs_data['invoice_value']} USD\nКод ТНВЭД: {customs_data.get('tnved_code', 'не указан')}\n"
+                
+                save_application(app_details)
+                
+                response = f"🤖 ✅ Заявка оформлена!\n\n👤 {name}, мы свяжемся с вами по телефону {phone} в течение 15 минут.\n\n📋 Детали заявки:\n• Тип: {delivery_data['delivery_type']}\n• Вес: {delivery_data['weight']} кг\n• Товар: {delivery_data['product_type']}\n• Город: {delivery_data['city']}\n• Доставка: {delivery_data['delivery_option']}\n\n🔄 Для нового расчета напишите «старт»"
+                
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+            else:
+                response = "Не удалось распознать контакты. Пожалуйста, введите имя и телефон в формате: `Иван, 87771234567`"
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
         
         # Обработка выбора доставки
         if waiting_for_delivery_choice:
             if user_message in ['1', '2']:
-                delivery_data['delivery_option'] = user_message
-                total_cost = session['t2_total'] if user_message == '2' else session['t1_total']
-                session.update({
-                    'delivery_data': delivery_data,
-                    'waiting_for_delivery_choice': False,
-                    'waiting_for_contacts': True,
-                    'total_cost': total_cost
-                })
-                chart_html = get_comparison_chart(session['t1_total'], session['t2_total'])
-                # Предполагается, что chart_html сохраняется в файл или доступен по URL
-                with open('comparison_chart.html', 'w', encoding='utf-8') as f:
-                    f.write(chart_html)
+                delivery_option = "самовывоз" if user_message == '1' else "до двери"
+                delivery_data['delivery_option'] = delivery_option
+                session['delivery_data'] = delivery_data
+                session['waiting_for_delivery_choice'] = False
                 
-                city_suffix = (' (деревня, хрупкий груз)' if language == 'ru' else ' (ауыл, сынғыш жүк)' if language == 'kz' else ' (乡村，易碎货物)') \
-                              if delivery_data.get('is_village') and delivery_data.get('is_fragile') else \
-                              (' (хрупкий груз)' if language == 'ru' else ' (сынғыш жүк)' if language == 'kz' else ' (易碎货物)') \
-                              if delivery_data.get('is_fragile') else \
-                              (' (деревня)' if language == 'ru' else ' (ауыл)' if language == 'kz' else ' (乡村)') \
-                              if delivery_data.get('is_village') else ''
-                
-                response = (
-                    f"✅ **{'ДОСТАВКА ДО ДВЕРИ' if user_message == '2' else 'ДОСТАВКА ДО АЛМАТЫ (самовывоз)'} {'таңдалды' if language == 'kz' else 'выбрана' if language == 'ru' else '已选择'}** {'(' + delivery_data['city'].capitalize() + city_suffix + ')' if user_message == '2' else ''}\n\n"
-                    f"📊 **{'Итоговый расчет' if language == 'ru' else 'Қорытынды есептеу' if language == 'kz' else '最终计算'}**:\n\n"
-                    f"📦 **{'Данные груза' if language == 'ru' else 'Жүк туралы мәліметтер' if language == 'kz' else '货物详情'}**:\n"
-                    f"• {'Вес' if language == 'ru' else 'Салмағы' if language == 'kz' else '重量'}: {delivery_data['weight']} кг\n"
-                    f"• {'Объем' if language == 'ru' else 'Көлемі' if language == 'kz' else '体积'}: {delivery_data['volume']} м³ ({'плотность' if language == 'ru' else 'тығыздығы' if language == 'kz' else '密度'}: {delivery_data['density']:.1f} кг/м³)\n"
-                    f"• {'Товар' if language == 'ru' else 'Товар' if language == 'kz' else '商品'}: {delivery_data['product_type']}\n"
-                    f"• {'Город' if language == 'ru' else 'Жеткізу қаласы' if language == 'kz' else '送货城市'}: {delivery_data['city'].capitalize()}{city_suffix}\n"
-                    f"• {'Стоимость инвойса' if language == 'ru' else 'Инвойс құны' if language == 'kz' else '发票金额'}: {customs_data.get('invoice_value', '–')} USD\n"
-                    f"• {'Код ТНВЭД' if language == 'ru' else 'ТН ВЭД коды' if language == 'kz' else 'HS编码'}: {customs_data.get('tnved_code', '–')}\n\n"
-                    f"💰 **{'Стоимость' if language == 'ru' else 'Құны' if language == 'kz' else '费用'}**:\n"
-                    f"• {'Доставка' if language == 'ru' else 'Жеткізу' if language == 'kz' else '运输'} ({'T1+T2' if user_message == '2' else 'T1'}): {(delivery_data['t1_cost'] + (delivery_data['t2_cost'] if user_message == '2' else 0)) * 1.20:,.0f} ₸\n"
-                    f"  - T1: {delivery_data['t1_cost'] * 1.20:,.0f} ₸ ({delivery_data['t1_rate']:.2f} USD/{delivery_data['unit']})\n"
-                    f"{'  - T2: ' + f'{delivery_data['t2_cost'] * 1.20:,.0f} ₸ (зона {delivery_data['zone']}, {delivery_data['t2_rate']:.0f} ₸/кг' + (' × 1.5 (' + ('хрупкость' if language == 'ru' else 'сынғыш' if language == 'kz' else '易碎') + ')' if delivery_data.get('is_fragile') else '') + (' × 2.0 (' + ('деревня' if language == 'ru' else 'ауыл' if language == 'kz' else '乡村') + ')' if delivery_data.get('is_village') else '') + ')' if user_message == '2' else ''}\n"
-                    f"• {'Таможенные платежи' if language == 'ru' else 'Кедендік төлемдер' if language == 'kz' else '海关费用'}: {customs_data.get('total_kzt', 0):,.0f} ₸\n"
-                    f"• **{'Итого' if language == 'ru' else 'Барлығы' if language == 'kz' else '总计'}**: {total_cost:,.0f} ₸\n\n"
-                    f"📈 **{'График сравнения стоимости доставки' if language == 'ru' else 'Жеткізу құнын салыстыру графигі' if language == 'kz' else '送货费用比较图表'}**:\n"
-                    f"[{'Ссылка' if language == 'ru' else 'Сілтеме' if language == 'kz' else '链接'}: comparison_chart.html]\n\n"
-                    f"📧 **{'Введите ваше имя, телефон и email для получения отчета' if language == 'ru' else 'Есеп алу үшін атыңызды, телефоныңызды және email-ді енгізіңіз' if language == 'kz' else '请输入您的姓名、电话和电子邮件以接收报告'}** (например: Айгуль, 87771234567, aygul@example.com)"
-                )
-                chat_history.append(f"Клиент: {user_message}")
-                chat_history.append(f"Ассистент: {response}")
+                final_response = show_final_calculation(delivery_data, customs_data, delivery_option)
+                chat_history.append(f"Ассистент: {final_response}")
                 session['chat_history'] = chat_history
-                return jsonify({"response": response})
-            return jsonify({"response": f"{'Напишите \"1\" или \"2\" для выбора доставки' if language == 'ru' else 'Жеткізу нұсқасын таңдау үшін \"1\" немесе \"2\" деп жазыңыз' if language == 'kz' else '请输入“1”或“2”选择送货方式'}"})
+                return jsonify({"response": final_response})
         
-        # Обработка ТНВЭД
+        # Обработка кода ТНВЭД
         if waiting_for_tnved:
-            if user_message.lower() in ['не знаю', 'білмеймін', '不知道']:
-                customs_data['tnved_code'] = get_tnved_code(delivery_data['product_type'])
-                response, t1_total, t2_total = get_customs_full_calculation(delivery_data, customs_data, language)
-                session.update({
-                    'customs_data': customs_data,
-                    'waiting_for_tnved': False,
-                    'waiting_for_delivery_choice': True,
-                    't1_total': t1_total,
-                    't2_total': t2_total
-                })
-                chat_history.append(f"Клиент: {user_message}")
+            if doesnt_know_tnved(user_message):
+                product_type = delivery_data.get('product_type', 'общие товары')
+                tnved_code = get_tnved_code(product_type)
+                customs_data['tnved_code'] = tnved_code
+                session['customs_data'] = customs_data
+                session['waiting_for_tnved'] = False
+                
+                response = f"🔍 Определяю код ТНВЭД для '{product_type}'...\n✅ Найден код: {tnved_code}\n\n📊 Продолжаем расчет..."
+                
+                full_calculation = get_customs_full_calculation(
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city'], 
+                    customs_data['invoice_value'],
+                    tnved_code,
+                    delivery_data['volume']
+                )
+                session['waiting_for_delivery_choice'] = True
+                
+                chat_history.append(f"Бот: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response + "\n\n" + full_calculation})
+            
+            elif re.match(r'^\d{4,10}', user_message):
+                customs_data['tnved_code'] = user_message
+                session['customs_data'] = customs_data
+                session['waiting_for_tnved'] = False
+                
+                response = get_customs_full_calculation(
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city'], 
+                    customs_data['invoice_value'],
+                    user_message,
+                    delivery_data['volume']
+                )
+                session['waiting_for_delivery_choice'] = True
+                
+                chat_history.append(f"Бот: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": f"✅ Код ТНВЭД сохранен!\n\n{response}"})
+            else:
+                response = "🤔 Не понял ваш ответ о коде ТНВЭД.\n\n💡 **Что вы можете сделать:**\n• Ввести код ТНВЭД вручную (например: 8504 40 100 9)\n• Написать \"не знаю\" - я определю код автоматически\n• Написать \"помоги\" - подскажу где найти код\n\n📋 Просто напишите одно из этих слов или введите код!"
+                chat_history.append(f"Бот: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+        
+        # Обработка данных растаможки
+        if waiting_for_customs:
+            invoice_value, tnved_code = extract_customs_info(user_message)
+            
+            if invoice_value:
+                customs_data['invoice_value'] = invoice_value
+                session['customs_data'] = customs_data
+                
+                if tnved_code:
+                    customs_data['tnved_code'] = tnved_code
+                    session['customs_data'] = customs_data
+                
+                # Если есть код ТНВЭД, показываем расчет
+                if customs_data.get('tnved_code'):
+                    response = get_customs_full_calculation(
+                        delivery_data['weight'],
+                        delivery_data['product_type'],
+                        delivery_data['city'],
+                        customs_data['invoice_value'],
+                        customs_data['tnved_code'],
+                        delivery_data['volume']
+                    )
+                    session['waiting_for_delivery_choice'] = True
+                    session['waiting_for_customs'] = False
+                else:
+                    # Если кода нет - предлагаем ввести или используем автоматический
+                    if doesnt_know_tnved(user_message):
+                        auto_tnved = get_tnved_code(delivery_data['product_type'])
+                        customs_data['tnved_code'] = auto_tnved
+                        session['customs_data'] = customs_data
+                        
+                        response = get_customs_full_calculation(
+                            delivery_data['weight'],
+                            delivery_data['product_type'],
+                            delivery_data['city'],
+                            customs_data['invoice_value'],
+                            auto_tnved,
+                            delivery_data['volume']
+                        )
+                        session['waiting_for_delivery_choice'] = True
+                        session['waiting_for_customs'] = False
+                    else:
+                        response = f"✅ Получены данные: {delivery_data['weight']} кг {delivery_data['product_type']} в {delivery_data['city']}, стоимость {customs_data['invoice_value']} USD\n\n📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
+                        session['waiting_for_tnved'] = True
+                        session['waiting_for_customs'] = False
+                
                 chat_history.append(f"Ассистент: {response}")
                 session['chat_history'] = chat_history
                 return jsonify({"response": response})
-            tnved_match = re.search(r'\d{4}\s*\d{2}\s*\d{4}', user_message)
-            if tnved_match:
-                customs_data['tnved_code'] = tnved_match.group(0)
-                response, t1_total, t2_total = get_customs_full_calculation(delivery_data, customs_data, language)
-                session.update({
-                    'customs_data': customs_data,
-                    'waiting_for_tnved': False,
-                    'waiting_for_delivery_choice': True,
-                    't1_total': t1_total,
-                    't2_total': t2_total
-                })
-                chat_history.append(f"Клиент: {user_message}")
+            else:
+                response = "Не удалось распознать стоимость. Пожалуйста, укажите стоимость в USD (например: 1500 USD)"
                 chat_history.append(f"Ассистент: {response}")
                 session['chat_history'] = chat_history
                 return jsonify({"response": response})
-            return jsonify({"response": f"{'Укажите код ТНВЭД (например: 6109 10 000 0) или напишите \"не знаю\"' if language == 'ru' else 'ТН ВЭД кодын көрсетіңіз (мысалы: 6109 10 000 0) немесе \"білмеймін\" деп жазыңыз' if language == 'kz' else '请提供HS编码 (例如: 6109 10 000 0) 或输入“不知道”'}"})
         
-        # Обработка основного ввода
-        delivery_type = 'КАРГО'
-        if re.search(r'инвойс|invoice|发票', user_message, re.IGNORECASE):
-            delivery_type = 'ИНВОЙС'
-            delivery_data['delivery_type'] = 'ИНВОЙС'
+        # Извлечение данных из сообщения
+        weight, product_type, city, volume = extract_delivery_info(user_message)
+        invoice_value, tnved_code = extract_customs_info(user_message)
         
-        result = extract_delivery_info(user_message, delivery_data, language)
-        if 'error' in result:
-            chat_history.append(f"Клиент: {user_message}")
-            chat_history.append(f"Ассистент: {result['error']}")
-            session['chat_history'] = chat_history
-            return jsonify({"response": result['error']})
+        # Обновление данных доставки
+        if weight:
+            delivery_data['weight'] = weight
+        if product_type:
+            delivery_data['product_type'] = product_type
+        if city:
+            delivery_data['city'] = city
+        if volume:
+            delivery_data['volume'] = volume
         
-        delivery_data.update(result)
+        # Обновление данных растаможки
+        if invoice_value:
+            customs_data['invoice_value'] = invoice_value
+        if tnved_code:
+            customs_data['tnved_code'] = tnved_code
+        
+        # Определение типа доставки
+        if not delivery_data['delivery_type']:
+            if customs_data['invoice_value'] or 'инвойс' in user_message.lower():
+                delivery_data['delivery_type'] = 'INVOICE'
+            else:
+                delivery_data['delivery_type'] = 'CARGO'
+        
+        # Сохранение обновленных данных
         session['delivery_data'] = delivery_data
-        customs_data['product_type'] = delivery_data['product_type']
+        session['customs_data'] = customs_data
         
-        if delivery_type == 'ИНВОЙС' and not customs_data.get('tnved_code'):
-            session.update({
-                'waiting_for_tnved': True,
-                'customs_data': customs_data,
-                'chat_history': chat_history + [f"Клиент: {user_message}", f"Ассистент: {'Укажите код ТНВЭД (например: 6109 10 000 0) или напишите \"не знаю\"' if language == 'ru' else 'ТН ВЭД кодын көрсетіңіз (мысалы: 6109 10 000 0) немесе \"білмеймін\" деп жазыңыз' if language == 'kz' else '请提供HS编码 (例如: 6109 10 000 0) 或输入“不知道”'}"]
-            })
-            return jsonify({"response": f"{'Укажите код ТНВЭД (например: 6109 10 000 0) или напишите \"не знаю\"' if language == 'ru' else 'ТН ВЭД кодын көрсетіңіз (мысалы: 6109 10 000 0) немесе \"білмеймін\" деп жазыңыз' if language == 'kz' else '请提供HS编码 (例如: 6109 10 000 0) 或输入“不知道”'}"})
+        # Проверка наличия всех данных
+        missing_data = get_missing_data(delivery_data, customs_data, delivery_data['delivery_type'])
         
-        response, t1_total, t2_total = get_customs_full_calculation(delivery_data, customs_data, language)
-        session.update({
-            'waiting_for_delivery_choice': True,
-            't1_total': t1_total,
-            't2_total': t2_total,
-            'chat_history': chat_history + [f"Клиент: {user_message}", f"Ассистент: {response}"]
-        })
+        if missing_data:
+            if delivery_data['delivery_type'] == 'INVOICE' and not customs_data['invoice_value']:
+                response = f"Для расчета ИНВОЙСА укажите стоимость товаров в USD (например: 1500 USD)"
+                session['waiting_for_customs'] = True
+            elif delivery_data['delivery_type'] == 'INVOICE' and 'код ТНВЭД' in missing_data:
+                response = f"✅ Получены данные: {delivery_data['weight']} кг {delivery_data['product_type']} в {delivery_data['city']}, объем {delivery_data.get('volume', 'не указан')} м³, стоимость {customs_data['invoice_value']} USD\n\n📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
+                session['waiting_for_tnved'] = True
+            else:
+                response = f"Для расчета укажите: {', '.join(missing_data)}"
+        else:
+            # Все данные есть - показываем расчет
+            if delivery_data['delivery_type'] == 'CARGO':
+                delivery_cost = calculate_quick_cost(delivery_data['weight'], delivery_data['product_type'], delivery_data['city'], delivery_data['volume'])
+                if delivery_cost:
+                    response = (
+                        f"📊 Расчет стоимости доставки:\n\n"
+                        f"✅ {delivery_data['weight']} кг {delivery_data['product_type']} в {delivery_data['city'].capitalize()}\n"
+                        f"✅ Объем: {delivery_data['volume']} м³ (плотность: {delivery_cost['density']:.1f} кг/м³)\n\n"
+                        f"🏷️ Выберите вариант доставки:\n\n"
+                        f"🚚 ВАРИАНТ 1: ДОСТАВКА ДО АЛМАТЫ (Т1)\n"
+                        f"• Доставка до склада в Алматы (самовывоз)\n"
+                        f"📦 Стоимость: {delivery_cost['t1_cost'] * 1.20:.0f} ₸\n\n"
+                        f"🏠 ВАРИАНТ 2: ДОСТАВКА ДО ДВЕРИ (Т1+Т2)\n"
+                        f"• Доставка до вашего адреса в {delivery_data['city'].capitalize()}\n"
+                        f"📦 Стоимость: {(delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20:.0f} ₸\n\n"
+                        f"💡 Напишите '1' или '2' чтобы выбрать вариант доставки!"
+                    )
+                    session['waiting_for_delivery_choice'] = True
+                else:
+                    response = "Ошибка расчета. Пожалуйста, проверьте данные."
+            
+            else:  # INVOICE
+                if not customs_data['invoice_value']:
+                    response = "Для расчета ИНВОЙСА укажите стоимость товаров в USD (например: 1500 USD)"
+                    session['waiting_for_customs'] = True
+                elif not customs_data.get('tnved_code'):
+                    if doesnt_know_tnved(user_message):
+                        auto_tnved = get_tnved_code(delivery_data['product_type'])
+                        customs_data['tnved_code'] = auto_tnved
+                        session['customs_data'] = customs_data
+                        
+                        response = get_customs_full_calculation(
+                            delivery_data['weight'],
+                            delivery_data['product_type'],
+                            delivery_data['city'],
+                            customs_data['invoice_value'],
+                            auto_tnved,
+                            delivery_data['volume']
+                        )
+                        session['waiting_for_delivery_choice'] = True
+                    else:
+                        response = "✅ Получены данные! 📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
+                        session['waiting_for_tnved'] = True
+                else:
+                    response = get_customs_full_calculation(
+                        delivery_data['weight'],
+                        delivery_data['product_type'],
+                        delivery_data['city'],
+                        customs_data['invoice_value'],
+                        customs_data['tnved_code'],
+                        delivery_data['volume']
+                    )
+                    session['waiting_for_delivery_choice'] = True
+        
+        # 🎯 УМНАЯ ОБРАБОТКА: Если не удалось обработать - используем Gemini
+        if not response:
+            context = f"История: {chat_history[-3:] if len(chat_history) > 3 else chat_history}"
+            response = get_gemini_response(user_message, context)
+        
+        chat_history.append(f"Ассистент: {response}")
+        session['chat_history'] = chat_history
+        
         return jsonify({"response": response})
+        
     except Exception as e:
-        logger.error(f"Ошибка обработки: {e}")
-        return jsonify({"response": f"{'Произошла ошибка. Попробуйте снова.' if language == 'ru' else 'Қате пайда болды. Қайтадан көріңіз.' if language == 'kz' else '发生错误，请重试。'}"})
+        logger.error(f"Ошибка в /chat: {e}")
+        return jsonify({"response": "Произошла ошибка. Пожалуйста, попробуйте еще раз."})
 
-# Заготовка для Telegram-бота (закомментирована, будет реализована позже)
-"""
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message, keyboard = get_welcome_message('ru')
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(k['text'], callback_data=k['callback_data']) for k in keyboard]])
-    await update.message.reply_text(message, reply_markup=reply_markup)
-
-async def callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = {'callback_data': query.data}
-    response = chat().get_json(force=True)
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(k['text'], callback_data=k['callback_data']) for k in response.get('keyboard', [])]])
-    await query.message.edit_text(response['response'], reply_markup=reply_markup)
-
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = {'message': update.message.text}
-    response = chat().get_json(force=True)
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(k['text'], callback_data=k['callback_data']) for k in response.get('keyboard', [])]])
-    await update.message.reply_text(response['response'], reply_markup=reply_markup)
-
-def run_telegram_bot():
-    application = Application.builder().token('YOUR_TELEGRAM_BOT_TOKEN').build()
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CallbackQueryHandler(callback_query))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
-    application.run_polling()
-"""
+@app.route('/clear', methods=['POST'])
+def clear_chat():
+    session.clear()
+    return jsonify({"status": "success"})
 
 if __name__ == '__main__':
-    app.run(debug=True)
-    # run_telegram_bot()  # Раскомментировать для запуска Telegram-бота
+    if initialize_models():
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        logger.info(f"=== PostPro Chat Bot запущен ===")
+        logger.info(f"Локальный доступ: http://localhost:5000")
+        logger.info(f"Сетевой доступ: http://{local_ip}:5000")
+        logger.info(f"=================================")
+        
+        app.run(host='0.0.0.0', port=5000, debug=True)
+    else:
+        logger.error("!!! Не удалось инициализировать модели Gemini")
