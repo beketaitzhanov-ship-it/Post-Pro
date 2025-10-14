@@ -7,6 +7,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+import os
+import subprocess
+import tempfile
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key'
@@ -14,41 +17,64 @@ app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Константы
 EXCHANGE_RATE = 550  # ₸/USD
-CUSTOMS_RATES = {'одежда': 0.10, 'электроника': 0.05, 'мебель': 0.10, 'общие товары': 0.00}
-CUSTOMS_FEES = {'брокер': 60000, 'декларация': 15000, 'сертификат': 120000}
+CUSTOMS_RATES = {
+    'одежда': 0.10,
+    'электроника': 0.05,
+    'мебель': 0.10,
+    'общие товары': 0.00
+}
+CUSTOMS_FEES = {
+    'брокер': 60000,
+    'декларация': 15000,
+    'сертификат': 120000
+}
 T1_RATES = {
     'одежда': [(50, 1.50), (100, 1.20), (200, 1.00), (float('inf'), 0.80)],
     'электроника': [(50, 2.50), (100, 2.30), (200, 2.10), (float('inf'), 1.80)],
     'мебель': [(50, 1.80), (100, 1.60), (200, 1.40), (float('inf'), 1.20)],
     'общие товары': [(50, 1.50), (100, 1.20), (200, 1.00), (float('inf'), 0.80)]
 }
-ZONES = {'алматы': 1, 'астана': 3, 'шымкент': 2, 'караганда': 4}
-T2_RATES = {1: (4200, 210), 2: (4400, 220), 3: (4700, 236), 4: (5000, 250)}
+ZONES = {
+    'алматы': 1,
+    'астана': 3,
+    'шымкент': 2,
+    'караганда': 4
+}
+T2_RATES = {
+    1: (4200, 210),
+    2: (4400, 220),
+    3: (4700, 236),
+    4: (5000, 250)
+}
 
 # Вспомогательные функции
-def calculate_t1_rate_by_density(density: float, product_type: str):
+def calculate_t1_rate_by_density(density: float, product_type: str) -> float:
+    """Рассчитывает ставку T1 на основе плотности груза."""
     for threshold, rate in T1_RATES.get(product_type, T1_RATES['общие товары']):
         if density <= threshold:
             return rate
     return T1_RATES[product_type][-1][1]
 
-def calculate_t2_rate(zone: int, weight: float):
+def calculate_t2_rate(zone: int, weight: float) -> float:
+    """Рассчитывает стоимость T2 доставки."""
     base_rate, extra_rate = T2_RATES.get(zone, (5000, 250))
     if weight <= 20:
         return base_rate
     return base_rate + (weight - 20) * extra_rate
 
-def calculate_quick_cost(weight: float, product_type: str, city: str, volume: float = None, dimensions: dict = None, is_fragile: bool = False, is_village: bool = False):
+def calculate_quick_cost(weight: float, product_type: str, city: str, volume: float = None,
+                        dimensions: dict = None, is_fragile: bool = False, is_village: bool = False) -> dict:
+    """Рассчитывает стоимость доставки T1 и T2."""
     try:
         if volume is None and dimensions:
             volume = (dimensions['length'] * dimensions['width'] * dimensions['height']) / 1000000
         if volume <= 0 or weight <= 0:
-            return None
+            return {'error': 'Вес и объем должны быть больше 0.'}
         
         density = weight / volume
         if density < 50 or density > 1000:
@@ -77,9 +103,11 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
         }
     except Exception as e:
         logger.error(f"Ошибка расчета доставки: {e}")
-        return None
+        return {'error': 'Ошибка расчета доставки.'}
 
-def calculate_customs_cost(invoice_value: float, product_type: str, weight: float, has_certificate: bool, needs_certificate: bool):
+def calculate_customs_cost(invoice_value: float, product_type: str, weight: float,
+                          has_certificate: bool, needs_certificate: bool) -> dict:
+    """Рассчитывает таможенные платежи."""
     try:
         customs_rate = CUSTOMS_RATES.get(product_type, 0.0)
         duty_usd = invoice_value * customs_rate
@@ -100,23 +128,31 @@ def calculate_customs_cost(invoice_value: float, product_type: str, weight: floa
         }
     except Exception as e:
         logger.error(f"Ошибка расчета таможни: {e}")
-        return None
+        return {'error': 'Ошибка расчета таможни.'}
 
-def check_certification_requirements(product_type: str):
+def check_certification_requirements(product_type: str) -> bool:
+    """Проверяет, требуется ли сертификат."""
     return product_type in ['электроника', 'мебель']
 
-def get_tnved_code(product_type: str):
-    codes = {'одежда': '6109 10 000 0', 'электроника': '8517 12 000 0', 'мебель': '9403 60 100 0'}
+def get_tnved_code(product_type: str) -> str:
+    """Возвращает код ТНВЭД для типа товара."""
+    codes = {
+        'одежда': '6109 10 000 0',
+        'электроника': '8517 12 000 0',
+        'мебель': '9403 60 100 0'
+    }
     return codes.get(product_type, '0000 00 000 0')
 
-def detect_language(text):
+def detect_language(text: str) -> str:
+    """Определяет язык ввода."""
     if re.search(r'[\u4e00-\u9fff]', text):
         return 'cn'
     elif re.search(r'[а-яА-ЯәғқңөұүіӘҒҚҢӨҰҮІ]', text):
         return 'kz' if re.search(r'[әғқңөұүіӘҒҚҢӨҰҮІ]', text) else 'ru'
     return 'ru'
 
-def get_welcome_message(lang='ru'):
+def get_welcome_message(lang: str = 'ru') -> tuple:
+    """Возвращает приветственное сообщение и клавиатуру."""
     if lang == 'kz':
         return (
             "Сәлеметсіз бе! PostPro сізге Қытайдан Қазақстанға жеткізу құнын есептеуге көмектеседі.\n\n"
@@ -184,7 +220,8 @@ def get_welcome_message(lang='ru'):
         {'text': '中文', 'callback_data': 'lang_cn'}
     ]
 
-def get_comparison_chart(t1_total, t2_total):
+def get_comparison_chart(t1_total: float, t2_total: float) -> str:
+    """Генерирует HTML-код для графика сравнения стоимости."""
     return f"""
 <!DOCTYPE html>
 <html lang="ru">
@@ -227,7 +264,9 @@ def get_comparison_chart(t1_total, t2_total):
 </html>
 """
 
-def generate_pdf_report(delivery_data, customs_data, client_name, client_phone, total_cost, language='ru'):
+def generate_pdf_report(delivery_data: dict, customs_data: dict, client_name: str, client_phone: str,
+                        total_cost: float, language: str = 'ru') -> str:
+    """Генерирует LaTeX-код для PDF-отчета."""
     labels = {
         'ru': {
             'title': 'Отчет о расчете доставки (PostPro)',
@@ -317,8 +356,12 @@ def generate_pdf_report(delivery_data, customs_data, client_name, client_phone, 
     
     l = labels[language]
     delivery_label = 'T1+T2' if delivery_data.get('delivery_option') == '2' else 'T1'
-    city_suffix = ' (деревня, хрупкий груз)' if delivery_data.get('is_village') and delivery_data.get('is_fragile') else \
-                  ' (хрупкий груз)' if delivery_data.get('is_fragile') else ' (деревня)' if delivery_data.get('is_village') else ''
+    city_suffix = (' (деревня, хрупкий груз)' if language == 'ru' else ' (ауыл, сынғыш жүк)' if language == 'kz' else ' (乡村，易碎货物)') \
+                  if delivery_data.get('is_village') and delivery_data.get('is_fragile') else \
+                  (' (хрупкий груз)' if language == 'ru' else ' (сынғыш жүк)' if language == 'kz' else ' (易碎货物)') \
+                  if delivery_data.get('is_fragile') else \
+                  (' (деревня)' if language == 'ru' else ' (ауыл)' if language == 'kz' else ' (乡村)') \
+                  if delivery_data.get('is_village') else ''
     
     return f"""
 \\documentclass[a4paper,12pt]{{article}}
@@ -387,7 +430,25 @@ def generate_pdf_report(delivery_data, customs_data, client_name, client_phone, 
 \\end{{document}}
 """
 
-def send_pdf_email(client_name, client_email, pdf_path, language='ru'):
+def generate_pdf_file(latex_content: str, output_filename: str = 'delivery_report.pdf') -> str:
+    """Генерирует PDF из LaTeX-кода."""
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.tex', delete=False) as tex_file:
+            tex_file.write(latex_content)
+            tex_file_path = tex_file.name
+        
+        subprocess.run(['xelatex', '-output-directory', os.path.dirname(tex_file_path), tex_file_path], check=True)
+        pdf_path = os.path.join(os.path.dirname(tex_file_path), os.path.splitext(os.path.basename(tex_file_path))[0] + '.pdf')
+        if os.path.exists(pdf_path):
+            os.rename(pdf_path, output_filename)
+        os.remove(tex_file_path)
+        return output_filename
+    except Exception as e:
+        logger.error(f"Ошибка генерации PDF: {e}")
+        return None
+
+def send_pdf_email(client_name: str, client_email: str, pdf_path: str, language: str = 'ru') -> bool:
+    """Отправляет PDF-отчет по email."""
     try:
         labels = {
             'ru': {'subject': f'Отчет о расчете доставки для {client_name}', 'body': f'Уважаемый(ая) {client_name},\n\nПрилагаем отчет о расчете доставки.\nСпасибо за выбор PostPro!\n'},
@@ -415,12 +476,14 @@ def send_pdf_email(client_name, client_email, pdf_path, language='ru'):
             server.login('postpro@example.com', 'your_password')
             server.send_message(msg)
         
+        logger.info(f"PDF отправлен на: {client_email}")
         return True
     except Exception as e:
         logger.error(f"Ошибка отправки email: {e}")
         return False
 
-def get_customs_full_calculation(delivery_data, customs_data, language='ru'):
+def get_customs_full_calculation(delivery_data: dict, customs_data: dict, language: str = 'ru') -> tuple:
+    """Генерирует полный расчет для ИНВОЙС."""
     labels = {
         'ru': {
             'title': 'Детальный расчет для ИНВОЙС',
@@ -446,8 +509,8 @@ def get_customs_full_calculation(delivery_data, customs_data, language='ru'):
             't2_desc': 'Доставка до вашего адреса',
             'additional': 'Дополнительно',
             'service_fee': 'Сервисный сбор: 20% (учтен в доставке)',
-            'fragile': 'Хрупкий груз? Укажите "хрупкий" (+50% к T2)',
-            'village': 'Доставка в деревню? Укажите "деревня" (+100% к T2)',
+            'fragile': 'Хрупкий груз: учтен (+50% к T2)',
+            'village': 'Доставка в деревню: учтен (+100% к T2)',
             'choose': 'Напишите "1" или "2" для выбора доставки'
         },
         'kz': {
@@ -474,8 +537,8 @@ def get_customs_full_calculation(delivery_data, customs_data, language='ru'):
             't2_desc': 'Сіздің мекенжайыңызға жеткізу',
             'additional': 'Қосымша',
             'service_fee': 'Қызмет ақысы: 20% (жеткізу құнында ескерілген)',
-            'fragile': 'Сынғыш жүк? "сынғыш" деп көрсетіңіз (+50% T2)',
-            'village': 'Ауылға жеткізу? "ауыл" деп көрсетіңіз (+100% T2)',
+            'fragile': 'Сынғыш жүк: ескерілген (+50% T2)',
+            'village': 'Ауылға жеткізу: ескерілген (+100% T2)',
             'choose': 'Жеткізу нұсқасын таңдау үшін "1" немесе "2" деп жазыңыз'
         },
         'cn': {
@@ -502,8 +565,8 @@ def get_customs_full_calculation(delivery_data, customs_data, language='ru'):
             't2_desc': '送货至您的地址',
             'additional': '附加信息',
             'service_fee': '服务费: 20% (已包含在送货费用中)',
-            'fragile': '易碎货物？请注明“易碎” (+50% T2)',
-            'village': '乡村送货？请注明“乡村” (+100% T2)',
+            'fragile': '易碎货物：已考虑 (+50% T2)',
+            'village': '乡村送货：已考虑 (+100% T2)',
             'choose': '请输入“1”或“2”选择送货方式'
         }
     }
@@ -520,19 +583,25 @@ def get_customs_full_calculation(delivery_data, customs_data, language='ru'):
         is_village=delivery_data.get('is_village', False)
     )
     
-    if not delivery_cost or 'error' in delivery_cost:
-        return delivery_cost.get('error', 'Ошибка расчета доставки')
-    if customs_data.get('invoice_value') and not customs_cost:
-        return 'Ошибка расчета таможни'
+    if 'error' in delivery_cost:
+        return delivery_cost['error'], None, None
+    if customs_data.get('invoice_value') and 'error' in customs_cost:
+        return 'Ошибка расчета таможни', None, None
     
     t1_total = delivery_cost['t1_cost'] * 1.20 + customs_cost.get('total_kzt', 0)
     t2_total = (delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20 + customs_cost.get('total_kzt', 0)
     delivery_data.update(delivery_cost)
     
-    city_suffix = ' (деревня, хрупкий груз)' if delivery_data.get('is_village') and delivery_data.get('is_fragile') else \
-                  ' (хрупкий груз)' if delivery_data.get('is_fragile') else ' (деревня)' if delivery_data.get('is_village') else ''
+    city_suffix = (' (деревня, хрупкий груз)' if language == 'ru' else ' (ауыл, сынғыш жүк)' if language == 'kz' else ' (乡村，易碎货物)') \
+                  if delivery_data.get('is_village') and delivery_data.get('is_fragile') else \
+                  (' (хрупкий груз)' if language == 'ru' else ' (сынғыш жүк)' if language == 'kz' else ' (易碎货物)') \
+                  if delivery_data.get('is_fragile') else \
+                  (' (деревня)' if language == 'ru' else ' (ауыл)' if language == 'kz' else ' (乡村)') \
+                  if delivery_data.get('is_village') else ''
     
     response = (
+        f"🔍 {'Получены данные. Определяем код ТНВЭД для' if language == 'ru' else 'Деректер алынды. ТН ВЭД кодын анықтау' if language == 'kz' else '已接收数据。正在为商品确定HS编码'} “{delivery_data['product_type']}”...\n"
+        f"✅ {'Код найден' if language == 'ru' else 'Код табылды' if language == 'kz' else '找到编码'}: {customs_data.get('tnved_code', '–')}\n\n"
         f"📊 **{l['title']}**:\n\n"
         f"📦 **{l['cargo']}**:\n"
         f"• {l['weight']}: {delivery_data['weight']} кг\n"
@@ -556,18 +625,19 @@ def get_customs_full_calculation(delivery_data, customs_data, language='ru'):
         f"🏠 **{l['t2']}**:\n"
         f"• {l['t2_desc']} ({delivery_data['city'].capitalize()}): {(delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20:,.0f} ₸\n"
         f"  - T1: {delivery_cost['t1_cost'] * 1.20:,.0f} ₸ ({delivery_cost['t1_rate']:.2f} USD/{delivery_cost['unit']})\n"
-        f"  - T2: {delivery_cost['t2_cost'] * 1.20:,.0f} ₸ (зона {delivery_cost['zone']}, {delivery_cost['t2_rate']:.0f} ₸/кг{' × 1.5 (' + l['fragile'].split('?')[0] + ')' if delivery_data.get('is_fragile') else ''}{' × 2.0 (' + l['village'].split('?')[0] + ')' if delivery_data.get('is_village') else ''})\n"
+        f"  - T2: {delivery_cost['t2_cost'] * 1.20:,.0f} ₸ (зона {delivery_cost['zone']}, {delivery_cost['t2_rate']:.0f} ₸/кг{' × 1.5 (' + l['fragile'].split(':')[0] + ')' if delivery_data.get('is_fragile') else ''}{' × 2.0 (' + l['village'].split(':')[0] + ')' if delivery_data.get('is_village') else ''})\n"
         f"• {l['customs']}: {customs_cost.get('total_kzt', 0):,.0f} ₸\n"
         f"• **{l['total']}**: {t2_total:,.0f} ₸\n\n"
         f"📋 **{l['additional']}**:\n"
         f"• {l['service_fee']}\n"
-        f"• {l['fragile'] if not delivery_data.get('is_fragile') else l['fragile'].replace('? Укажите \"хрупкий\"', ': учтен')}\n"
-        f"• {l['village'] if not delivery_data.get('is_village') else l['village'].replace('? Укажите \"деревня\"', ': учтен')}\n\n"
+        f"• {l['fragile']}\n"
+        f"• {l['village']}\n\n"
         f"💡 **{l['choose']}**"
     )
     return response, t1_total, t2_total
 
-def extract_delivery_info(message: str, delivery_data: dict):
+def extract_delivery_info(message: str, delivery_data: dict, language: str = 'ru') -> dict:
+    """Извлекает данные доставки из сообщения."""
     missing_fields = []
     
     if not delivery_data.get('weight'):
@@ -575,7 +645,7 @@ def extract_delivery_info(message: str, delivery_data: dict):
         if weight_match:
             delivery_data['weight'] = float(weight_match.group(1))
         else:
-            missing_fields.append('вес груза (кг)' if session.get('language', 'ru') == 'ru' else 'жүктің салмағы (кг)' if session.get('language') == 'kz' else '货物重量 (公斤)')
+            missing_fields.append('вес груза (кг)' if language == 'ru' else 'жүктің салмағы (кг)' if language == 'kz' else '货物重量 (公斤)')
     
     if not delivery_data.get('product_type'):
         product_match = re.search(r'(одежда|электроника|мебель|общие товары|киім|жиһаз|электроника|жалпы тауарлар|服装|电子产品|家具|普通商品)', message, re.IGNORECASE)
@@ -587,7 +657,7 @@ def extract_delivery_info(message: str, delivery_data: dict):
             }
             delivery_data['product_type'] = product_map.get(product, product)
         else:
-            missing_fields.append('тип товара' if session.get('language', 'ru') == 'ru' else 'товар түрі' if session.get('language') == 'kz' else '商品类型')
+            missing_fields.append('тип товара' if language == 'ru' else 'товар түрі' if language == 'kz' else '商品类型')
     
     if not delivery_data.get('city'):
         city_match = re.search(r'(алматы|астана|шымкент|караганда|阿拉木图|阿斯塔纳|奇姆肯特|卡拉干达)', message, re.IGNORECASE)
@@ -596,7 +666,7 @@ def extract_delivery_info(message: str, delivery_data: dict):
             city_map = {'ала木图': 'алматы', '阿斯塔纳': 'астана', '奇姆肯特': 'шымкент', '卡拉干达': 'караганда'}
             delivery_data['city'] = city_map.get(city, city)
         else:
-            missing_fields.append('город доставки' if session.get('language', 'ru') == 'ru' else 'жеткізу қаласы' if session.get('language') == 'kz' else '送货城市')
+            missing_fields.append('город доставки' if language == 'ru' else 'жеткізу қаласы' if language == 'kz' else '送货城市')
     
     if not delivery_data.get('volume'):
         volume_match = re.search(r'(\d+\.?\d*)\s*(м3|м³|m3|立方米)', message, re.IGNORECASE)
@@ -607,14 +677,14 @@ def extract_delivery_info(message: str, delivery_data: dict):
             length, width, height = map(float, dimensions_match.groups()[:3])
             delivery_data['volume'] = (length * width * height) / 1000000
         else:
-            missing_fields.append('объем груза (м³) или габариты (Д×Ш×В в см)' if session.get('language', 'ru') == 'ru' else 'жүктің көлемі (м³) немесе өлшемдері (Ұ×Е×Б см-де)' if session.get('language') == 'kz' else '货物体积 (立方米) 或尺寸 (长×宽×高，厘米)')
+            missing_fields.append('объем груза (м³) или габариты (Д×Ш×В в см)' if language == 'ru' else 'жүктің көлемі (м³) немесе өлшемдері (Ұ×Е×Б см-де)' if language == 'kz' else '货物体积 (立方米) 或尺寸 (长×宽×高，厘米)')
     
-    if not customs_data.get('invoice_value') and 'инвойс' in message.lower() or 'invoice' in message.lower() or '发票' in message.lower():
+    if not customs_data.get('invoice_value') and re.search(r'инвойс|invoice|发票', message, re.IGNORECASE):
         invoice_match = re.search(r'(\d+\.?\d*)\s*(usd|美元)', message, re.IGNORECASE)
         if invoice_match:
             customs_data['invoice_value'] = float(invoice_match.group(1))
         else:
-            missing_fields.append('стоимость инвойса (USD)' if session.get('language', 'ru') == 'ru' else 'инвойс құны (USD)' if session.get('language') == 'kz' else '发票金额 (美元)')
+            missing_fields.append('стоимость инвойса (USD)' if language == 'ru' else 'инвойс құны (USD)' if language == 'kz' else '发票金额 (美元)')
     
     if re.search(r'хрупкий|сынғыш|易碎', message.lower()):
         delivery_data['is_fragile'] = True
@@ -622,20 +692,27 @@ def extract_delivery_info(message: str, delivery_data: dict):
         delivery_data['is_village'] = True
     
     if missing_fields:
-        return {'error': f"Пожалуйста, укажите: {', '.join(missing_fields)}" if language == 'ru' else f"Көрсетіңіз: {', '.join(missing_fields)}" if language == 'kz' else f"请提供: {', '.join(missing_fields)}"}
+        return {'error': f"{'Пожалуйста, укажите' if language == 'ru' else 'Көрсетіңіз' if language == 'kz' else '请提供'}: {', '.join(missing_fields)}"}
     
     return delivery_data
 
 @app.route('/chat', methods=['POST'])
 def chat():
+    """Основной эндпоинт для обработки запросов."""
     try:
         data = request.json
         user_message = data.get('message', '').strip()
         callback_data = data.get('callback_data', '')
         
         # Инициализация сессии
-        delivery_data = session.get('delivery_data', {'weight': None, 'product_type': None, 'city': None, 'volume': None, 'delivery_type': None, 'delivery_option': None, 'is_fragile': False, 'is_village': False})
-        customs_data = session.get('customs_data', {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False, 'tnved_code': None})
+        delivery_data = session.get('delivery_data', {
+            'weight': None, 'product_type': None, 'city': None, 'volume': None,
+            'delivery_type': None, 'delivery_option': None, 'is_fragile': False, 'is_village': False
+        })
+        customs_data = session.get('customs_data', {
+            'invoice_value': None, 'product_type': None, 'has_certificate': False,
+            'needs_certificate': False, 'tnved_code': None
+        })
         chat_history = session.get('chat_history', [])
         waiting_for_contacts = session.get('waiting_for_contacts', False)
         waiting_for_customs = session.get('waiting_for_customs', False)
@@ -656,14 +733,18 @@ def chat():
             session['language'] = language
             message, keyboard = get_welcome_message(language)
             logger.info(f"Клиент выбрал язык: {language}")
+            chat_history.append(f"Ассистент: {message}")
+            session['chat_history'] = chat_history
             return jsonify({"response": message, "keyboard": keyboard})
         
         # Сброс сессии
         if user_message.lower() in ['/start', 'сброс', 'начать заново', 'новый расчет', 'старт']:
             session.clear()
             session.update({
-                'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None, 'delivery_type': None, 'delivery_option': None, 'is_fragile': False, 'is_village': False},
-                'customs_data': {'invoice_value': None, 'product_type': None, 'has_certificate': False, 'needs_certificate': False, 'tnved_code': None},
+                'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None,
+                                  'delivery_type': None, 'delivery_option': None, 'is_fragile': False, 'is_village': False},
+                'customs_data': {'invoice_value': None, 'product_type': None, 'has_certificate': False,
+                                 'needs_certificate': False, 'tnved_code': None},
                 'chat_history': [f"Клиент: {user_message}"],
                 'waiting_for_contacts': False,
                 'waiting_for_customs': False,
@@ -681,9 +762,10 @@ def chat():
             contact_match = re.search(r'(.+),\s*(\d{10})\s*,?\s*([\w\.-]+@[\w\.-]+)', user_message)
             if contact_match:
                 client_name, client_phone, client_email = contact_match.groups()
-                pdf_path = 'delivery_report.pdf'  # Предполагается, что PDF уже сгенерирован
-                if send_pdf_email(client_name, client_email, pdf_path, language):
-                    logger.info(f"PDF отправлен на: {client_email}")
+                latex_content = generate_pdf_report(delivery_data, customs_data, client_name, client_phone,
+                                                  session['total_cost'], language)
+                pdf_path = generate_pdf_file(latex_content)
+                if pdf_path and send_pdf_email(client_name, client_email, pdf_path, language):
                     response = (
                         f"🤖 ✅ {'Заявка оформлена' if language == 'ru' else 'Тапсырыс рәсімделді' if language == 'kz' else '订单已确认'}, {client_name}!\n\n"
                         f"📋 **{'Детали заявки' if language == 'ru' else 'Тапсырыс мәліметтері' if language == 'kz' else '订单详情'}**:\n"
@@ -700,15 +782,18 @@ def chat():
                         f"📞 {'Мы свяжемся с вами по телефону' if language == 'ru' else 'Сізбен телефон арқылы хабарласамыз' if language == 'kz' else '我们将通过电话与您联系'} +7 ({client_phone[:3]}) {client_phone[3:6]}-{client_phone[6:8]}-{client_phone[8:10]} {'в течение 15 минут' if language == 'ru' else '15 минут ішінде' if language == 'kz' else '在15分钟内'}.\n\n"
                         f"🔄 {'Для нового расчета напишите «старт»' if language == 'ru' else 'Жаңа есептеу үшін «старт» деп жазыңыз' if language == 'kz' else '为进行新计算，请输入“start”'}."
                     )
+                    chat_history.append(f"Клиент: {user_message}")
+                    chat_history.append(f"Ассистент: {response}")
                     session.update({
                         'waiting_for_contacts': False,
-                        'chat_history': chat_history + [f"Клиент: {user_message}", f"Ассистент: {response}"],
+                        'chat_history': chat_history,
                         'total_cost': None
                     })
                     return jsonify({"response": response})
                 else:
-                    return jsonify({"response": "Ошибка отправки отчета. Попробуйте снова."})
-            return jsonify({"response": f"Пожалуйста, укажите имя, телефон и email (например: Айгуль, 87771234567, aygul@example.com)" if language == 'ru' else f"Атыңызды, телефоныңызды және email-ді көрсетіңіз (мысалы: Айгүл, 87771234567, aygul@example.com)" if language == 'kz' else f"请提供姓名、电话和电子邮件 (例如: Айгуль, 87771234567, aygul@example.com)"})
+                    return jsonify({"response": f"{'Ошибка отправки отчета. Попробуйте снова.' if language == 'ru' else 'Есепті жіберу қатесі. Қайтадан көріңіз.' if language == 'kz' else '发送报告失败。请重试。'}"})
+            return jsonify({"response": f"{'Пожалуйста, укажите имя, телефон и email (например: Айгуль, 87771234567, aygul@example.com)' if language == 'ru' else 'Атыңызды, телефоныңызды және email-ді көрсетіңіз (мысалы: Айгүл, 87771234567, aygul@example.com)' if language == 'kz' else '请提供姓名、电话和电子邮件 (例如: Айгуль, 87771234567, aygul@example.com)'}"}
+        )
         
         # Обработка выбора доставки
         if waiting_for_delivery_choice:
@@ -722,7 +807,17 @@ def chat():
                     'total_cost': total_cost
                 })
                 chart_html = get_comparison_chart(session['t1_total'], session['t2_total'])
-                # Предполагается, что chart_html сохраняется и доступен через URL
+                # Предполагается, что chart_html сохраняется в файл или доступен по URL
+                with open('comparison_chart.html', 'w', encoding='utf-8') as f:
+                    f.write(chart_html)
+                
+                city_suffix = (' (деревня, хрупкий груз)' if language == 'ru' else ' (ауыл, сынғыш жүк)' if language == 'kz' else ' (乡村，易碎货物)') \
+                              if delivery_data.get('is_village') and delivery_data.get('is_fragile') else \
+                              (' (хрупкий груз)' if language == 'ru' else ' (сынғыш жүк)' if language == 'kz' else ' (易碎货物)') \
+                              if delivery_data.get('is_fragile') else \
+                              (' (деревня)' if language == 'ru' else ' (ауыл)' if language == 'kz' else ' (乡村)') \
+                              if delivery_data.get('is_village') else ''
+                
                 response = (
                     f"✅ **{'ДОСТАВКА ДО ДВЕРИ' if user_message == '2' else 'ДОСТАВКА ДО АЛМАТЫ (самовывоз)'} {'таңдалды' if language == 'kz' else 'выбрана' if language == 'ru' else '已选择'}** {'(' + delivery_data['city'].capitalize() + city_suffix + ')' if user_message == '2' else ''}\n\n"
                     f"📊 **{'Итоговый расчет' if language == 'ru' else 'Қорытынды есептеу' if language == 'kz' else '最终计算'}**:\n\n"
@@ -739,9 +834,9 @@ def chat():
                     f"{'  - T2: ' + f'{delivery_data['t2_cost'] * 1.20:,.0f} ₸ (зона {delivery_data['zone']}, {delivery_data['t2_rate']:.0f} ₸/кг' + (' × 1.5 (' + ('хрупкость' if language == 'ru' else 'сынғыш' if language == 'kz' else '易碎') + ')' if delivery_data.get('is_fragile') else '') + (' × 2.0 (' + ('деревня' if language == 'ru' else 'ауыл' if language == 'kz' else '乡村') + ')' if delivery_data.get('is_village') else '') + ')' if user_message == '2' else ''}\n"
                     f"• {'Таможенные платежи' if language == 'ru' else 'Кедендік төлемдер' if language == 'kz' else '海关费用'}: {customs_data.get('total_kzt', 0):,.0f} ₸\n"
                     f"• **{'Итого' if language == 'ru' else 'Барлығы' if language == 'kz' else '总计'}**: {total_cost:,.0f} ₸\n\n"
-                    f"📈 **{'Жеткізу құнын салыстыру графигі' if language == 'kz' else '送货费用比较图表' if language == 'cn' else 'График сравнения стоимости доставки'}**:\n"
+                    f"📈 **{'График сравнения стоимости доставки' if language == 'ru' else 'Жеткізу құнын салыстыру графигі' if language == 'kz' else '送货费用比较图表'}**:\n"
                     f"[{'Ссылка' if language == 'ru' else 'Сілтеме' if language == 'kz' else '链接'}: comparison_chart.html]\n\n"
-                    f"📧 **{'Введите ваше имя и email для получения отчета' if language == 'ru' else 'Есеп алу үшін атыңызды және email-ді енгізіңіз' if language == 'kz' else '请输入您的姓名和电子邮件以接收报告'}** (например: Айгуль, aygul@example.com)"
+                    f"📧 **{'Введите ваше имя, телефон и email для получения отчета' if language == 'ru' else 'Есеп алу үшін атыңызды, телефоныңызды және email-ді енгізіңіз' if language == 'kz' else '请输入您的姓名、电话和电子邮件以接收报告'}** (например: Айгуль, 87771234567, aygul@example.com)"
                 )
                 chat_history.append(f"Клиент: {user_message}")
                 chat_history.append(f"Ассистент: {response}")
@@ -751,8 +846,23 @@ def chat():
         
         # Обработка ТНВЭД
         if waiting_for_tnved:
-            if user_message.lower() == 'не знаю':
+            if user_message.lower() in ['не знаю', 'білмеймін', '不知道']:
                 customs_data['tnved_code'] = get_tnved_code(delivery_data['product_type'])
+                response, t1_total, t2_total = get_customs_full_calculation(delivery_data, customs_data, language)
+                session.update({
+                    'customs_data': customs_data,
+                    'waiting_for_tnved': False,
+                    'waiting_for_delivery_choice': True,
+                    't1_total': t1_total,
+                    't2_total': t2_total
+                })
+                chat_history.append(f"Клиент: {user_message}")
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response})
+            tnved_match = re.search(r'\d{4}\s*\d{2}\s*\d{4}', user_message)
+            if tnved_match:
+                customs_data['tnved_code'] = tnved_match.group(0)
                 response, t1_total, t2_total = get_customs_full_calculation(delivery_data, customs_data, language)
                 session.update({
                     'customs_data': customs_data,
@@ -769,11 +879,11 @@ def chat():
         
         # Обработка основного ввода
         delivery_type = 'КАРГО'
-        if 'инвойс' in user_message.lower() or 'invoice' in user_message.lower() or '发票' in user_message.lower():
+        if re.search(r'инвойс|invoice|发票', user_message, re.IGNORECASE):
             delivery_type = 'ИНВОЙС'
             delivery_data['delivery_type'] = 'ИНВОЙС'
         
-        result = extract_delivery_info(user_message, delivery_data)
+        result = extract_delivery_info(user_message, delivery_data, language)
         if 'error' in result:
             chat_history.append(f"Клиент: {user_message}")
             chat_history.append(f"Ассистент: {result['error']}")
@@ -802,7 +912,40 @@ def chat():
         return jsonify({"response": response})
     except Exception as e:
         logger.error(f"Ошибка обработки: {e}")
-        return jsonify({"response": "Произошла ошибка. Попробуйте снова."})
+        return jsonify({"response": f"{'Произошла ошибка. Попробуйте снова.' if language == 'ru' else 'Қате пайда болды. Қайтадан көріңіз.' if language == 'kz' else '发生错误，请重试。'}"})
+
+# Заготовка для Telegram-бота (закомментирована, будет реализована позже)
+"""
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message, keyboard = get_welcome_message('ru')
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(k['text'], callback_data=k['callback_data']) for k in keyboard]])
+    await update.message.reply_text(message, reply_markup=reply_markup)
+
+async def callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = {'callback_data': query.data}
+    response = chat().get_json(force=True)
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(k['text'], callback_data=k['callback_data']) for k in response.get('keyboard', [])]])
+    await query.message.edit_text(response['response'], reply_markup=reply_markup)
+
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = {'message': update.message.text}
+    response = chat().get_json(force=True)
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(k['text'], callback_data=k['callback_data']) for k in response.get('keyboard', [])]])
+    await update.message.reply_text(response['response'], reply_markup=reply_markup)
+
+def run_telegram_bot():
+    application = Application.builder().token('YOUR_TELEGRAM_BOT_TOKEN').build()
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CallbackQueryHandler(callback_query))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    application.run_polling()
+"""
 
 if __name__ == '__main__':
     app.run(debug=True)
+    # run_telegram_bot()  # Раскомментировать для запуска Telegram-бота
