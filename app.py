@@ -247,7 +247,8 @@ def get_gemini_response(user_message, context=""):
         return "Сервис временно недоступен"
     
     try:
-        full_prompt = f"Контекст: {context}\n\nСообщение: {user_message}\n\nОтвет:"
+        # ДОБАВИТЬ системный промпт в начало сообщения
+        full_prompt = f"{SYSTEM_INSTRUCTION}\n\nКонтекст: {context}\n\nСообщение: {user_message}\n\nОтвет:"
         response = model.generate_content(
             full_prompt,
             generation_config=GenerationConfig(
@@ -532,4 +533,5 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
