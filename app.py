@@ -52,6 +52,20 @@ else:
     logger.error("!!! Приложение запускается с значениями по умолчанию из-за ошибки загрузки config.json")
     EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS = 550, {}, {}, {}, {}, {}, []
 
+# --- НОВАЯ ФУНКЦИЯ ЗАГРУЗКИ ПРОМПТА ЛИЧНОСТИ ---
+def load_personality_prompt():
+    """Загружает промпт личности из файла personality_prompt.txt."""
+    try:
+        with open('personality_prompt.txt', 'r', encoding='utf-8') as f:
+            prompt_text = f.read()
+            logger.info(">>> Файл personality_prompt.txt успешно загружен.")
+            return prompt_text
+    except FileNotFoundError:
+        logger.error("!!! Файл personality_prompt.txt не найден! Бот будет отвечать стандартно.")
+        return "Ты — полезный ассистент."
+
+PERSONALITY_PROMPT = load_personality_prompt()
+
 # --- СИСТЕМНЫЙ ПРОМПТ ---
 SYSTEM_INSTRUCTION = """
 Ты — умный ассистент компании PostPro. Твоя главная цель — помочь клиенту рассчитать стоимость доставки и оформить заявку.
@@ -312,23 +326,27 @@ def save_application(details):
     except Exception as e: 
         logger.error(f"Ошибка сохранения: {e}")
 
+# --- ОБНОВЛЕННАЯ ФУНКЦИЯ ДЛЯ ОБЩЕНИЯ С GEMINI ---
 def get_gemini_response(user_message, context=""):
+    """Получает ответ от Gemini для общих вопросов."""
     if not model:
-        return "Сервис временно недоступен"
+        return "Извините, сейчас я могу отвечать только на вопросы по доставке."
     
     try:
-        full_prompt = f"{SYSTEM_INSTRUCTION}\n\nКонтекст: {context}\n\nСообщение: {user_message}\n\nОтвет:"
+        # Формируем полный промпт, используя PERSONALITY_PROMPT
+        full_prompt = f"{PERSONALITY_PROMPT}\n\nТекущий контекст диалога:\n{context}\n\nВопрос клиента: {user_message}\n\nТвой ответ:"
+        
         response = model.generate_content(
             full_prompt,
             generation_config=GenerationConfig(
-                temperature=0.7,
+                temperature=0.8, # Повышена температура для более креативных ответов
                 max_output_tokens=1000,
             )
         )
         return response.text
     except Exception as e:
         logger.error(f"Ошибка Gemini: {e}")
-        return "Извините, произошла ошибка. Попробуйте позже."
+        return "Ой, кажется, у меня что-то пошло не так с креативной частью! Давайте лучше вернемся к расчету доставки, с этим я точно справлюсь. 😊"
 
 def extract_delivery_info(text):
     """Извлечение данных о доставке"""
