@@ -59,25 +59,54 @@
     "жанаозен": 5,
     "бейнеу": 5
   },
-  "T1_RATES": {
-    "ткани": 1.7,
-    "одежда": 1.7,
-    "инструменты": 2.1,
-    "общие товары": 2.4,
-    "мебель": 2.1,
-    "косметика": 2.3,
-    "автозапчасти": 2.4,
-    "малая техника": 2.5,
-    "продукты": 2.7,
-    "белье": 2.8,
-    "лекарства": 2.9,
-    "лекарсива": 2.9,
-    "медикаменты": 2.9,
-    "посуда": 2.2,
-    "игрушки": 2.3,
-    "электроника": 2.6,
-    "техника": 2.6,
-    "вещи": 2.4
+  "T1_RATES_DENSITY": {
+  "мебель": [
+    { "min_density": 400, "price": 0.80, "unit": "kg" },
+    { "min_density": 350, "price": 0.90, "unit": "kg" },
+    { "min_density": 300, "price": 1.00, "unit": "kg" },
+    { "min_density": 250, "price": 1.10, "unit": "kg" },
+    { "min_density": 200, "price": 1.20, "unit": "kg" },
+    { "min_density": 100, "price": 2.20, "unit": "kg" },
+    { "min_density": 0,   "price": 230,  "unit": "m3" }
+  ],
+  "автозапчасти": [
+    { "min_density": 400, "price": 1.00, "unit": "kg" },
+    { "min_density": 350, "price": 1.20, "unit": "kg" },
+    { "min_density": 100, "price": 2.40, "unit": "kg" },
+    { "min_density": 0,   "price": 240,  "unit": "m3" }
+  ],
+  "аксессуары": [
+    { "min_density": 400, "price": 0.90, "unit": "kg" },
+    { "min_density": 100, "price": 2.30, "unit": "kg" },
+    { "min_density": 0,   "price": 230,  "unit": "m3" }
+  ],
+  "техника": [
+    { "min_density": 400, "price": 1.40, "unit": "kg" },
+    { "min_density": 100, "price": 2.60, "unit": "kg" },
+    { "min_density": 0,   "price": 270,  "unit": "m3" }
+  ],
+  "продукты": [
+    { "min_density": 300, "price": 1.50, "unit": "kg" },
+    { "min_density": 100, "price": 2.70, "unit": "kg" },
+    { "min_density": 0,   "price": 280,  "unit": "m3" }
+  ],
+  "ткани": [
+    { "min_density": 300, "price": 0.80, "unit": "kg" },
+    { "min_density": 100, "price": 1.80, "unit": "kg" }
+  ],
+  "инструменты": [
+    { "min_density": 400, "price": 0.75, "unit": "kg" },
+    { "min_density": 100, "price": 2.10, "unit": "kg" },
+    { "min_density": 0,   "price": 220,  "unit": "m3" }
+  ],
+  "белье": [
+    { "min_density": 180, "price": 1.30, "unit": "kg" }
+  ],
+  "игрушки": [
+    { "min_density": 200, "price": 1.50, "unit": "kg" },
+    { "min_density": 0,   "price": 230,  "unit": "m3" }
+  ]
+}
   },
   "T2_RATES": {
     "алматы": 120,
