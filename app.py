@@ -188,7 +188,7 @@ def get_welcome_message(lang: str = 'ru') -> tuple:
             "• 发票：美元金额\n"
             "• 易碎货物或乡村送货（如适用）\n\n"
             "✨ **请求示例:**\n"
-            "\"50 公斤服装到阿斯塔纳，体积 0.5 立方米\"\n"
+            "\"50 公斤服装到阿斯塔纳, 体积 0.5 立方米\"\n"
             "\"货运 100 公斤电子产品到阿拉木图, 尺寸 120x80x60 厘米\"\n"
             "\"发票 200 公斤家具到奇姆肯特 5000 美元, 体积 2.5 立方米, 易碎\"\n\n"
             "💬 为更改语言, 请选择下面的按钮."
@@ -712,10 +712,6 @@ def chat():
             'needs_certificate': False, 'tnved_code': None
         })
         chat_history = session.get('chat_history', [])
-        waiting_for_contacts = session.get('waiting_for_contacts', False)
-        waiting_for_customs = session.get('waiting_for_customs', False)
-        waiting_for_delivery_choice = session.get('waiting_for_delivery_choice', False)
-        waiting_for_tnved = session.get('waiting_for_tnved', False)
         language = session.get('language', 'ru')
         
         # Автоматическое определение языка
@@ -748,6 +744,7 @@ def chat():
                 'waiting_for_customs': False,
                 'waiting_for_delivery_choice': False,
                 'waiting_for_tnved': False,
+                'waiting_for_order_confirmation': False,
                 'language': language
             })
             message, keyboard = get_welcome_message(language)
@@ -755,8 +752,49 @@ def chat():
             session['chat_history'] = chat_history
             return jsonify({"response": message, "keyboard": keyboard})
         
+        # Обработка подтверждения заявки
+        if session.get('waiting_for_order_confirmation', False):
+            if user_message.lower() in ['да', 'иә', 'yes', '是'] or callback_data == 'confirm_yes':
+                session['waiting_for_order_confirmation'] = False
+                session['waiting_for_contacts'] = True
+                response = "📞 Чтобы оформить, введите ваше имя и телефон (например: Иван, 87771234567)"
+            elif user_message.lower() in ['нет', 'жоқ', 'no', '否', 'не хочу', 'не хочу давать контакты'] or callback_data == 'confirm_no':
+                session['waiting_for_order_confirmation'] = False
+                response = "Хорошо, заявка не оформлена. Для нового расчета напишите 'старт'."
+                keyboard = [
+                    {"text": "Старт", "callback_data": "start"}
+                ]
+            else:
+                response = "Пожалуйста, напишите 'да' или 'нет' для подтверждения оформления заявки."
+                keyboard = [
+                    {"text": "Да", "callback_data": "confirm_yes"},
+                    {"text": "Нет", "callback_data": "confirm_no"}
+                ]
+            chat_history.append(f"Ассистент: {response}")
+            session['chat_history'] = chat_history
+            return jsonify({"response": response, "keyboard": keyboard})
+        
         # Обработка контактов
-        if waiting_for_contacts:
+        if session.get('waiting_for_contacts', False):
+            if user_message.lower() in ['отмена', 'старт', 'cancel', '取消']:
+                session.clear()
+                session.update({
+                    'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None,
+                                      'delivery_type': None, 'delivery_option': None, 'is_fragile': False, 'is_village': False},
+                    'customs_data': {'invoice_value': None, 'product_type': None, 'has_certificate': False,
+                                     'needs_certificate': False, 'tnved_code': None},
+                    'chat_history': [f"Клиент: {user_message}"],
+                    'waiting_for_contacts': False,
+                    'waiting_for_customs': False,
+                    'waiting_for_delivery_choice': False,
+                    'waiting_for_tnved': False,
+                    'waiting_for_order_confirmation': False,
+                    'language': language
+                })
+                message, keyboard = get_welcome_message(language)
+                chat_history.append(f"Ассистент: {message}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": message, "keyboard": keyboard})
             name, phone = extract_contact_info(user_message)
             if name and phone:
                 session['waiting_for_contacts'] = False
@@ -780,17 +818,45 @@ def chat():
                 return jsonify({"response": response})
         
         # Обработка выбора доставки
-        if waiting_for_delivery_choice:
+        if session.get('waiting_for_delivery_choice', False):
             if user_message in ['1', '2']:
-                delivery_option = "самовывоз" if user_message == '1' else "до двери"
-                delivery_data['delivery_option'] = delivery_option
-                session['delivery_data'] = delivery_data
                 session['waiting_for_delivery_choice'] = False
-                
-                final_response = show_final_calculation(delivery_data, customs_data, delivery_option)
-                chat_history.append(f"Ассистент: {final_response}")
+                delivery_data['delivery_option'] = user_message
+                session['delivery_data'] = delivery_data
+                delivery_cost = calculate_quick_cost(
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city'], 
+                    delivery_data['volume'],
+                    is_fragile=delivery_data.get('is_fragile', False),
+                    is_village=delivery_data.get('is_village', False)
+                )
+                total_cost = delivery_cost['t1_cost'] * 1.20 if user_message == '1' else (delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20
+                total_cost += customs_data.get('total_kzt', 0)
+                delivery_type = 'ДОСТАВКА ДО АЛМАТЫ (самовывоз)' if user_message == '1' else 'ДОСТАВКА ДО ДВЕРИ'
+                response = (
+                    f"✅ Выбрана {delivery_type}\n\n"
+                    f"💰 Итоговая стоимость: {total_cost:.0f} ₸\n"
+                    f"📦 Груз будет {'на складе в Алматы' if user_message == '1' else f'доставлен по адресу в {delivery_data['city'].capitalize()}'}\n\n"
+                    f"Хотите оформить заявку? Напишите 'да' или 'нет'."
+                )
+                session['waiting_for_order_confirmation'] = True
+                keyboard = [
+                    {"text": "Да", "callback_data": "confirm_yes"},
+                    {"text": "Нет", "callback_data": "confirm_no"}
+                ]
+                chat_history.append(f"Ассистент: {response}")
                 session['chat_history'] = chat_history
-                return jsonify({"response": final_response})
+                return jsonify({"response": response, "keyboard": keyboard})
+            else:
+                response = "Пожалуйста, выберите вариант доставки, написав '1' или '2'."
+                keyboard = [
+                    {"text": "1", "callback_data": "delivery_1"},
+                    {"text": "2", "callback_data": "delivery_2"}
+                ]
+                chat_history.append(f"Ассистент: {response}")
+                session['chat_history'] = chat_history
+                return jsonify({"response": response, "keyboard": keyboard})
         
         # Обработка кода ТНВЭД
         if waiting_for_tnved:
