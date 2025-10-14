@@ -10,6 +10,7 @@ from email import encoders
 import os
 import subprocess
 import tempfile
+import socket
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'postpro-secret-key-2024'
@@ -206,7 +207,9 @@ def get_welcome_message(lang: str = 'ru') -> tuple:
         "• Вес груза (например: 50 кг)\n"
         "• Объем груза (м³) или габариты (Д×Ш×В в см)\n"
         "• Тип товара (одежда, электроника и т.д.)\n"
-        "• Город доставки в Казахстане\n\n"
+        "• Город доставки в Казахстане\n"
+        "• ИНВОЙС: стоимость в USD (если применимо)\n"
+        "• Сынғыш/хрупкий груз или доставка в деревню (если применимо)\n\n"
         "✨ **Примеры запросов:**\n"
         "\"50 кг одежды в Астану, объем 0.5 м³\"\n"
         "\"Карго 100 кг электроники в Алматы, габариты 120x80x60 см\"\n"
@@ -581,10 +584,8 @@ def get_customs_full_calculation(delivery_data: dict, customs_data: dict, langua
         is_village=delivery_data.get('is_village', False)
     )
     
-    if 'error' in delivery_cost:
-        return delivery_cost['error'], None, None
-    if customs_data.get('invoice_value') and 'error' in customs_cost:
-        return 'Ошибка расчета таможни', None, None
+    if 'error' in delivery_cost or (customs_data.get('invoice_value') and 'error' in customs_cost):
+        return "Ошибка расчета. Проверьте данные.", None, None
     
     t1_total = delivery_cost['t1_cost'] * 1.20 + customs_cost.get('total_kzt', 0)
     t2_total = (delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20 + customs_cost.get('total_kzt', 0)
@@ -693,6 +694,10 @@ def extract_delivery_info(message: str, delivery_data: dict, language: str = 'ru
         return {'error': f"{'Пожалуйста, укажите' if language == 'ru' else 'Көрсетіңіз' if language == 'kz' else '请提供'}: {', '.join(missing_fields)}"}
     
     return delivery_data
+
+def doesnt_know_tnved(message: str) -> bool:
+    """Проверяет, указал ли пользователь, что не знает код ТНВЭД."""
+    return message.lower() in ['не знаю', 'помоги', 'dont know', '不知道', 'жоқ']
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -859,7 +864,7 @@ def chat():
                 return jsonify({"response": response, "keyboard": keyboard})
         
         # Обработка кода ТНВЭД
-        if waiting_for_tnved:
+        if session.get('waiting_for_tnved', False):
             if doesnt_know_tnved(user_message):
                 product_type = delivery_data.get('product_type', 'общие товары')
                 tnved_code = get_tnved_code(product_type)
@@ -869,38 +874,28 @@ def chat():
                 
                 response = f"🔍 Определяю код ТНВЭД для '{product_type}'...\n✅ Найден код: {tnved_code}\n\n📊 Продолжаем расчет..."
                 
-                full_calculation = get_customs_full_calculation(
-                    delivery_data['weight'], 
-                    delivery_data['product_type'], 
-                    delivery_data['city'], 
-                    customs_data['invoice_value'],
-                    tnved_code,
-                    delivery_data['volume']
+                full_calculation_response, t1_total, t2_total = get_customs_full_calculation(
+                    delivery_data, customs_data, language
                 )
                 session['waiting_for_delivery_choice'] = True
                 
                 chat_history.append(f"Бот: {response}")
                 session['chat_history'] = chat_history
-                return jsonify({"response": response + "\n\n" + full_calculation})
+                return jsonify({"response": response + "\n\n" + full_calculation_response})
             
             elif re.match(r'^\d{4,10}', user_message):
                 customs_data['tnved_code'] = user_message
                 session['customs_data'] = customs_data
                 session['waiting_for_tnved'] = False
                 
-                response = get_customs_full_calculation(
-                    delivery_data['weight'], 
-                    delivery_data['product_type'], 
-                    delivery_data['city'], 
-                    customs_data['invoice_value'],
-                    user_message,
-                    delivery_data['volume']
+                full_calculation_response, t1_total, t2_total = get_customs_full_calculation(
+                    delivery_data, customs_data, language
                 )
                 session['waiting_for_delivery_choice'] = True
                 
-                chat_history.append(f"Бот: {response}")
+                chat_history.append(f"Бот: ✅ Код ТНВЭД сохранен!\n\n{full_calculation_response}")
                 session['chat_history'] = chat_history
-                return jsonify({"response": f"✅ Код ТНВЭД сохранен!\n\n{response}"})
+                return jsonify({"response": f"✅ Код ТНВЭД сохранен!\n\n{full_calculation_response}"})
             else:
                 response = "🤔 Не понял ваш ответ о коде ТНВЭД.\n\n💡 **Что вы можете сделать:**\n• Ввести код ТНВЭД вручную (например: 8504 40 100 9)\n• Написать \"не знаю\" - я определю код автоматически\n• Написать \"помоги\" - подскажу где найти код\n\n📋 Просто напишите одно из этих слов или введите код!"
                 chat_history.append(f"Бот: {response}")
@@ -908,7 +903,7 @@ def chat():
                 return jsonify({"response": response})
         
         # Обработка данных растаможки
-        if waiting_for_customs:
+        if session.get('waiting_for_customs', False):
             invoice_value, tnved_code = extract_customs_info(user_message)
             
             if invoice_value:
@@ -921,16 +916,12 @@ def chat():
                 
                 # Если есть код ТНВЭД, показываем расчет
                 if customs_data.get('tnved_code'):
-                    response = get_customs_full_calculation(
-                        delivery_data['weight'],
-                        delivery_data['product_type'],
-                        delivery_data['city'],
-                        customs_data['invoice_value'],
-                        customs_data['tnved_code'],
-                        delivery_data['volume']
+                    full_calculation_response, t1_total, t2_total = get_customs_full_calculation(
+                        delivery_data, customs_data, language
                     )
                     session['waiting_for_delivery_choice'] = True
                     session['waiting_for_customs'] = False
+                    response = full_calculation_response
                 else:
                     # Если кода нет - предлагаем ввести или используем автоматический
                     if doesnt_know_tnved(user_message):
@@ -938,16 +929,12 @@ def chat():
                         customs_data['tnved_code'] = auto_tnved
                         session['customs_data'] = customs_data
                         
-                        response = get_customs_full_calculation(
-                            delivery_data['weight'],
-                            delivery_data['product_type'],
-                            delivery_data['city'],
-                            customs_data['invoice_value'],
-                            auto_tnved,
-                            delivery_data['volume']
+                        full_calculation_response, t1_total, t2_total = get_customs_full_calculation(
+                            delivery_data, customs_data, language
                         )
                         session['waiting_for_delivery_choice'] = True
                         session['waiting_for_customs'] = False
+                        response = full_calculation_response
                     else:
                         response = f"✅ Получены данные: {delivery_data['weight']} кг {delivery_data['product_type']} в {delivery_data['city']}, стоимость {customs_data['invoice_value']} USD\n\n📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
                         session['waiting_for_tnved'] = True
@@ -963,24 +950,20 @@ def chat():
                 return jsonify({"response": response})
         
         # Извлечение данных из сообщения
-        weight, product_type, city, volume = extract_delivery_info(user_message)
-        invoice_value, tnved_code = extract_customs_info(user_message)
-        
-        # Обновление данных доставки
-        if weight:
-            delivery_data['weight'] = weight
-        if product_type:
-            delivery_data['product_type'] = product_type
-        if city:
-            delivery_data['city'] = city
-        if volume:
-            delivery_data['volume'] = volume
-        
-        # Обновление данных растаможки
-        if invoice_value:
-            customs_data['invoice_value'] = invoice_value
-        if tnved_code:
-            customs_data['tnved_code'] = tnved_code
+        extracted_data = extract_delivery_info(user_message, delivery_data, language)
+        if 'error' in extracted_data:
+            response = extracted_data['error']
+        else:
+            delivery_data.update(extracted_data)
+            session['delivery_data'] = delivery_data
+            
+            # Обновление данных растаможки
+            invoice_value, tnved_code = extract_customs_info(user_message)
+            if invoice_value:
+                customs_data['invoice_value'] = invoice_value
+            if tnved_code:
+                customs_data['tnved_code'] = tnved_code
+            session['customs_data'] = customs_data
         
         # Определение типа доставки
         if not delivery_data['delivery_type']:
@@ -1037,28 +1020,20 @@ def chat():
                         customs_data['tnved_code'] = auto_tnved
                         session['customs_data'] = customs_data
                         
-                        response = get_customs_full_calculation(
-                            delivery_data['weight'],
-                            delivery_data['product_type'],
-                            delivery_data['city'],
-                            customs_data['invoice_value'],
-                            auto_tnved,
-                            delivery_data['volume']
+                        full_calculation_response, t1_total, t2_total = get_customs_full_calculation(
+                            delivery_data, customs_data, language
                         )
                         session['waiting_for_delivery_choice'] = True
+                        response = full_calculation_response
                     else:
                         response = "✅ Получены данные! 📋 **Укажите код ТНВЭД**\n\n💡 Если не знаете код, напишите:\n• \"не знаю\" - я определю код автоматически\n• \"помоги\" - подскажу где найти код\n\n✨ Или просто введите код в формате: 8504 40 100 9"
                         session['waiting_for_tnved'] = True
                 else:
-                    response = get_customs_full_calculation(
-                        delivery_data['weight'],
-                        delivery_data['product_type'],
-                        delivery_data['city'],
-                        customs_data['invoice_value'],
-                        customs_data['tnved_code'],
-                        delivery_data['volume']
+                    full_calculation_response, t1_total, t2_total = get_customs_full_calculation(
+                        delivery_data, customs_data, language
                     )
                     session['waiting_for_delivery_choice'] = True
+                    response = full_calculation_response
         
         # 🎯 УМНАЯ ОБРАБОТКА: Если не удалось обработать - используем Gemini
         if not response:
@@ -1079,6 +1054,48 @@ def clear_chat():
     session.clear()
     return jsonify({"status": "success"})
 
+def initialize_models():
+    """Инициализация моделей (заглушка)."""
+    return True
+
+def save_application(app_details):
+    """Сохранение заявки (заглушка)."""
+    logger.info(f"Заявка сохранена: {app_details}")
+
+def extract_contact_info(message):
+    """Извлечение имени и телефона (заглушка)."""
+    match = re.match(r'([^,]+),\s*(\+?\d{10,11})', message)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+    return None, None
+
+def extract_customs_info(message):
+    """Извлечение стоимости инвойса и кода ТНВЭД (заглушка)."""
+    invoice_match = re.search(r'(\d+\.?\d*)\s*(usd|美元)', message, re.IGNORECASE)
+    tnved_match = re.search(r'(\d{4}\s*\d{2}\s*\d{2}\s*\d{1,2})', message)
+    return (float(invoice_match.group(1)) if invoice_match else None, tnved_match.group(1) if tnved_match else None)
+
+def get_missing_data(delivery_data, customs_data, delivery_type):
+    """Получение списка недостающих данных (заглушка)."""
+    missing = []
+    if not delivery_data['weight']:
+        missing.append('вес груза')
+    if not delivery_data['product_type']:
+        missing.append('тип товара')
+    if not delivery_data['city']:
+        missing.append('город доставки')
+    if not delivery_data['volume']:
+        missing.append('объем груза')
+    if delivery_type == 'INVOICE' and not customs_data['invoice_value']:
+        missing.append('стоимость инвойса')
+    if delivery_type == 'INVOICE' and not customs_data.get('tnved_code'):
+        missing.append('код ТНВЭД')
+    return missing
+
+def get_gemini_response(message, context):
+    """Получение ответа от Gemini (заглушка)."""
+    return "Извините, пока нет доступа к Gemini. Попробуйте уточнить запрос."
+
 if __name__ == '__main__':
     if initialize_models():
         hostname = socket.gethostname()
@@ -1089,5 +1106,3 @@ if __name__ == '__main__':
         logger.info(f"=================================")
         
         app.run(host='0.0.0.0', port=5000, debug=True)
-    else:
-        logger.error("!!! Не удалось инициализировать модели Gemini")
