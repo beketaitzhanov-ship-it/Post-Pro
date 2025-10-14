@@ -443,15 +443,10 @@ def extract_contact_info(text):
 
 # --- ROUTES ---
 @app.route('/')
-def index(): 
-    if 'delivery_data' not in session:
-        session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'volume': None}
-    if 'chat_history' not in session:
-        session['chat_history'] = []
-    if 'waiting_for_contacts' not in session:
-        session['waiting_for_contacts'] = False
-    if 'calculation_shown' not in session:
-        session['calculation_shown'] = False
+def index():
+    # Очищаем сессию каждый раз, когда пользователь открывает главную страницу.
+    # Это гарантирует, что каждый новый визит начинает диалог с чистого листа.
+    session.clear()
     return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
@@ -675,3 +670,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
