@@ -198,7 +198,7 @@ CUSTOMS_RATES = {
     "одежда": 10, "электроника": 5, "косметика": 15, "техника": 5,
     "мебель": 10, "автозапчасти": 5, "общие товары": 10, "инструменты": 8,
     "ткани": 12, "посуда": 10, "продукты": 15, "лекарства": 0, "белье": 12,
-    "игрушки": 5, "вещи": 10
+    "игрушки": 5, "вечи": 10
 }
 
 CUSTOMS_FEES = {
@@ -261,6 +261,8 @@ def initialize_models():
             system_instruction="Ты — специалист по таможенному оформлению. Определяй код ТН ВЭД ЕАЭС для товаров. Возвращай ТОЛЬКО код в формате XXXXX XXX X"
         )
         
+        # Тестируем подключение
+        test_response = main_model.generate_content("Тест")
         logger.info(">>> Модели Gemini успешно инициализированы")
         return True
     except Exception as e:
@@ -455,9 +457,9 @@ def calculate_quick_cost(weight, volume, product_type, city):
 def calculate_customs_cost(invoice_value, product_type, weight):
     try:
         product_type_lower = product_type.lower()
-        customs_rate = CUSTOMS_RATES.get(product_type_lower, 10) / 100
+        customs_rate = CUSTOMS_RATES.get(product_type_lower, 10)
         
-        duty_usd = invoice_value * customs_rate
+        duty_usd = invoice_value * (customs_rate / 100)
         vat_base = invoice_value + duty_usd
         vat_usd = vat_base * 0.12
         
@@ -469,11 +471,58 @@ def calculate_customs_cost(invoice_value, product_type, weight):
         return {
             'duty_usd': duty_usd,
             'vat_usd': vat_usd,
-            'total_kzt': total_kzt
+            'duty_kzt': duty_kzt,
+            'vat_kzt': vat_kzt,
+            'total_kzt': total_kzt,
+            'customs_rate': customs_rate
         }
     except Exception as e:
         logger.error(f"Ошибка расчета растаможки: {e}")
         return None
+
+def check_certification_requirements(product_name):
+    """Проверка требований к сертификации"""
+    # Упрощенная проверка для демо
+    products_requiring_certificate = ['электроника', 'техника', 'игрушки', 'продукты', 'косметика']
+    return product_name.lower() in products_requiring_certificate
+
+def get_customs_detailed_calculation(invoice_value, product_type, weight, tnved_code):
+    """Детальный расчет таможенных платежей"""
+    try:
+        customs_cost = calculate_customs_cost(invoice_value, product_type, weight)
+        if not customs_cost:
+            return "Ошибка расчета таможенных платежей"
+        
+        needs_certificate = check_certification_requirements(product_type)
+        
+        response = (
+            f"📋 Детальный расчет таможенных платежей:\n\n"
+            f"✅ Таможенная стоимость: {invoice_value} USD\n"
+            f"✅ Код ТН ВЭД: {tnved_code}\n"
+            f"✅ Ставка пошлины: {customs_cost['customs_rate']}%\n\n"
+            f"💸 Таможенные платежи:\n"
+            f"• Пошлина: {customs_cost['duty_usd']:.2f} USD ({customs_cost['duty_kzt']:,.0f} ₸)\n"
+            f"• НДС: {customs_cost['vat_usd']:.2f} USD ({customs_cost['vat_kzt']:,.0f} ₸)\n"
+            f"• Услуги брокера: {CUSTOMS_FEES['брокер']:,} ₸\n"
+            f"• Подача декларации: {CUSTOMS_FEES['декларация']:,} ₸\n"
+        )
+        
+        if needs_certificate:
+            response += f"• Сертификат соответствия: {CUSTOMS_FEES['сертификат']:,} ₸\n"
+            customs_cost['total_kzt'] += CUSTOMS_FEES['сертификат']
+        
+        response += f"\n💰 ИТОГО таможня: {customs_cost['total_kzt']:,.0f} ₸\n"
+        
+        if needs_certificate:
+            response += f"📄 Сертификация: ТРЕБУЕТСЯ ✅\n"
+        else:
+            response += f"📄 Сертификация: не требуется\n"
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Ошибка детального расчета: {e}")
+        return "Ошибка расчета таможенных платежей"
 
 def get_tnved_code(product_name):
     if not customs_model:
@@ -516,8 +565,9 @@ def save_application(details):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        return handle_chat_message()
+        return "Method not allowed", 405
     
+    # Инициализация сессии
     if 'delivery_data' not in session:
         session['delivery_data'] = {'weight': None, 'product_type': None, 'city': None, 'volume': None, 'delivery_type': None, 'delivery_option': None}
     if 'customs_data' not in session:
@@ -558,12 +608,18 @@ def chat():
         
         # Инициализация моделей если нужно
         if main_model is None:
-            initialize_models()
+            if not initialize_models():
+                return jsonify({"response": "🚚 Добро пожаловать в PostPro! Сервис временно недоступен, попробуйте позже."})
         
         response = None
         
+        # Обработка вопроса о курсе доллара
+        if any(word in user_message.lower() for word in ['курс', 'доллар', 'usd', 'тенге', 'обмен']):
+            today = datetime.now().strftime("%d.%m.%Y")
+            response = f"💱 Актуальный курс:\n\n💰 1 USD = {EXCHANGE_RATE} ₸\n📊 Все расчеты ведутся по этому курсу!"
+        
         # Сброс по команде
-        if user_message.lower() in ['/start', 'сброс', 'начать заново', 'новый расчет', 'старт']:
+        elif user_message.lower() in ['/start', 'сброс', 'начать заново', 'новый расчет', 'старт']:
             session.clear()
             session.update({
                 'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None, 'delivery_type': None, 'delivery_option': None},
@@ -754,15 +810,22 @@ def chat():
                         )
                         
                         if delivery_cost and customs_cost:
+                            # Детальный расчет таможенных платежей
+                            customs_details = get_customs_detailed_calculation(
+                                customs_data['invoice_value'],
+                                delivery_data['product_type'],
+                                delivery_data['weight'],
+                                customs_data['tnved_code']
+                            )
+                            
                             t1_total = delivery_cost['t1_cost'] * 1.20 + customs_cost['total_kzt']
                             t2_total = (delivery_cost['t1_cost'] + delivery_cost['t2_cost']) * 1.20 + customs_cost['total_kzt']
                             
                             response = (
+                                f"{customs_details}\n\n"
                                 f"📊 Расчет для ИНВОЙС:\n\n"
                                 f"✅ {delivery_data['weight']} кг {delivery_data['product_type']} в {delivery_data['city'].capitalize()}\n"
-                                f"✅ Объем: {delivery_data['volume']} м³\n"
-                                f"✅ Стоимость: {customs_data['invoice_value']} USD\n"
-                                f"✅ Код ТНВЭД: {customs_data['tnved_code']}\n\n"
+                                f"✅ Объем: {delivery_data['volume']} м³\n\n"
                                 f"🏷️ Выберите вариант:\n\n"
                                 f"🚚 1 - До Алматы: {t1_total:,.0f} ₸\n"
                                 f"🏠 2 - До двери: {t2_total:,.0f} ₸\n\n"
