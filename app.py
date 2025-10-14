@@ -39,6 +39,25 @@ def load_config():
 
 config = load_config()
 
+# === ДОБАВЬТЕ ЭТОТ КОД ДЛЯ ДИАГНОСТИКИ ПРЯМО ЗДЕСЬ ===
+print("=== ДЕБАГ КОНФИГА ===")
+print("Конфиг загружен:", "ДА" if config else "НЕТ")
+if config:
+    print("Ключи в конфиге:", list(config.keys()))
+    print("Курс валют:", config.get("EXCHANGE_RATE", "НЕТ"))
+    print("Категории товаров:", list(config.get("PRODUCT_CATEGORIES", {}).keys()))
+    # Проверим конкретно косметику
+    if "косметика" in config.get("PRODUCT_CATEGORIES", {}):
+        print("✅ Категория 'косметика' найдена!")
+    else:
+        print("❌ Категория 'косметика' НЕ найдена!")
+else:
+    print("Конфиг НЕ загружен!")
+print("Текущая рабочая директория:", os.getcwd())
+print("Файлы в директории:", [f for f in os.listdir('.') if f.endswith('.json') or f.endswith('.py')])
+print("=====================")
+# === КОНЕЦ ДИАГНОСТИЧЕСКОГО КОДА ===
+
 if config:
     EXCHANGE_RATE = config.get("EXCHANGE_RATE", {}).get("rate", 550)
     DESTINATION_ZONES = config.get("DESTINATION_ZONES", {})
@@ -914,3 +933,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
