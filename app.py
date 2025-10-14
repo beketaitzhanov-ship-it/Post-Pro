@@ -344,26 +344,40 @@ main_model = None
 customs_model = None
 
 def initialize_models():
-    """Инициализация моделей Gemini"""
+    """Инициализация моделей Gemini с улучшенной обработкой ошибок"""
     global main_model, customs_model
     try:
-        if GEMINI_API_KEY:
-            genai.configure(api_key=GEMINI_API_KEY)
-            main_model = genai.GenerativeModel(
-                model_name='models/gemini-2.0-flash',
-                system_instruction=MAIN_SYSTEM_INSTRUCTION
-            )
-            customs_model = genai.GenerativeModel(
-                model_name='models/gemini-2.0-flash', 
-                system_instruction=CUSTOMS_SYSTEM_INSTRUCTION
-            )
-            logger.info(">>> Модели Gemini успешно инициализированы.")
-            return True
-        else:
-            logger.error("!!! API ключ не найден")
+        if not GEMINI_API_KEY:
+            logger.error("!!! API ключ не найден в переменных окружения")
+            # Создаем заглушки для моделей
+            main_model = None
+            customs_model = None
             return False
+            
+        genai.configure(api_key=GEMINI_API_KEY)
+        
+        # Инициализируем основную модель
+        main_model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',  # Используем более стабильную модель
+            system_instruction=MAIN_SYSTEM_INSTRUCTION
+        )
+        
+        # Инициализируем модель для таможни
+        customs_model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            system_instruction=CUSTOMS_SYSTEM_INSTRUCTION
+        )
+        
+        # Тестируем подключение
+        test_response = main_model.generate_content("Тест")
+        logger.info(">>> Модели Gemini успешно инициализированы и протестированы.")
+        return True
+        
     except Exception as e:
-        logger.error(f"!!! Ошибка инициализации Gemini: {e}")
+        logger.error(f"!!! Ошибка инициализации Gemini: {str(e)}")
+        # Создаем заглушки для продолжения работы
+        main_model = None
+        customs_model = None
         return False
 
 # --- УМНЫЕ ФУНКЦИИ ДЛЯ ОБРАБОТКИ ВВОДА ---
@@ -1329,3 +1343,4 @@ if __name__ == '__main__':
         app.run(host='0.0.0.0', port=5000, debug=True)
     else:
         logger.error("!!! Не удалось инициализировать модели Gemini")
+
