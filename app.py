@@ -39,25 +39,6 @@ def load_config():
 
 config = load_config()
 
-# === ДОБАВЬТЕ ЭТОТ КОД ДЛЯ ДИАГНОСТИКИ ПРЯМО ЗДЕСЬ ===
-print("=== ДЕБАГ КОНФИГА ===")
-print("Конфиг загружен:", "ДА" if config else "НЕТ")
-if config:
-    print("Ключи в конфиге:", list(config.keys()))
-    print("Курс валют:", config.get("EXCHANGE_RATE", "НЕТ"))
-    print("Категории товаров:", list(config.get("PRODUCT_CATEGORIES", {}).keys()))
-    # Проверим конкретно косметику
-    if "косметика" in config.get("PRODUCT_CATEGORIES", {}):
-        print("✅ Категория 'косметика' найдена!")
-    else:
-        print("❌ Категория 'косметика' НЕ найдена!")
-else:
-    print("Конфиг НЕ загружен!")
-print("Текущая рабочая директория:", os.getcwd())
-print("Файлы в директории:", [f for f in os.listdir('.') if f.endswith('.json') or f.endswith('.py')])
-print("=====================")
-# === КОНЕЦ ДИАГНОСТИЧЕСКОГО КОДА ===
-
 if config:
     EXCHANGE_RATE = config.get("EXCHANGE_RATE", {}).get("rate", 550)
     DESTINATION_ZONES = config.get("DESTINATION_ZONES", {})
@@ -483,7 +464,7 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
         f"{comparison_text}\n\n"
         f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
         f"💳 **Оплата:** пост-оплата при получении\n\n"
-        f"✅ **Хотите оставить заявку?** Напишите ваше имя и телефон!"
+        f"✅ **Оставить заявку?** Напишите ваше имя и телефон!\n"
         f"🔄 **Новый расчет?** Напишите **Старт**"
     )
     return response
@@ -848,34 +829,34 @@ def chat():
                 return jsonify({"response": response_message})
         
         # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
-if has_all_data and not calculation_shown:
-    # Производим расчет
-    quick_cost = calculate_quick_cost(
-        delivery_data['weight'], 
-        delivery_data['product_type'], 
-        delivery_data['city'],
-        delivery_data.get('volume')
-    )
-    
-    if quick_cost:
-        # Сразу показываем детальный расчет вместо вопроса
-        detailed_response = calculate_detailed_cost(
-            quick_cost,
-            delivery_data['weight'], 
-            delivery_data['product_type'], 
-            delivery_data['city']
-        )
-        
-        # Сохраняем результат расчета в сессии
-        session['quick_cost'] = quick_cost
-        session['calculation_shown'] = True
-        session['waiting_for_contacts'] = True  # Сразу переходим к сбору контактов
-        session['delivery_data'] = delivery_data
-        session['chat_history'] = chat_history
-        
-        return jsonify({"response": detailed_response})
-    else:
-        return jsonify({"response": "❌ Не удалось рассчитать стоимость. Проверьте правильность введенных данных."})
+        if has_all_data and not calculation_shown:
+            # Производим расчет
+            quick_cost = calculate_quick_cost(
+                delivery_data['weight'], 
+                delivery_data['product_type'], 
+                delivery_data['city'],
+                delivery_data.get('volume')
+            )
+            
+            if quick_cost:
+                # Сразу показываем детальный расчет вместо вопроса
+                detailed_response = calculate_detailed_cost(
+                    quick_cost,
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city']
+                )
+                
+                # Сохраняем результат расчета в сессии
+                session['quick_cost'] = quick_cost
+                session['calculation_shown'] = True
+                session['waiting_for_contacts'] = True  # Сразу переходим к сбору контактов
+                session['delivery_data'] = delivery_data
+                session['chat_history'] = chat_history
+                
+                return jsonify({"response": detailed_response})
+            else:
+                return jsonify({"response": "❌ Не удалось рассчитать стоимость. Проверьте правильность введенных данных."})
         
         # Обработка после показа расчета
         if calculation_shown:
@@ -940,7 +921,3 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
-
-
-
