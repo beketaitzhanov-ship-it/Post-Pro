@@ -16,7 +16,7 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 app = Flask(__name__)
-app.secret_key = 'postpro-secret-key-2024'
+app.secret_key = os.getenv('SECRET_KEY', 'postpro-secret-key-2024')
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800
 
 # --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
@@ -61,7 +61,7 @@ def load_personality_prompt():
             return prompt_text
     except FileNotFoundError:
         logger.error("!!! Файл personality_prompt.txt не найден! Бот будет отвечать стандартно.")
-        return "Ты — полезный ассистент."
+        return "Ты — дружелюбный и профессиональный ассистент логистической компании Post Pro. Общайся вежливо, с лёгким позитивом и эмодзи, как живой человек."
 
 PERSONALITY_PROMPT = load_personality_prompt()
 
@@ -243,6 +243,10 @@ def get_t1_density_rule(product_type, weight, volume):
     rules = T1_RATES_DENSITY.get(product_type.lower())
     if not rules:
         rules = T1_RATES_DENSITY.get("мебель")
+    
+    # Проверка на наличие правил
+    if not rules:
+        return None, density
 
     for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
         if density >= rule['min_density']:
@@ -421,7 +425,7 @@ def get_gemini_response(user_message, context=""):
         full_prompt = f"{PERSONALITY_PROMPT}\n\nТекущий контекст диалога:\n{context}\n\nВопрос клиента: {user_message}\n\nТвой ответ:"
         
         response = model.generate_content(
-            full_prompt,
+            contents=full_prompt,
             generation_config=GenerationConfig(
                 temperature=0.8,
                 max_output_tokens=1000,
@@ -490,9 +494,18 @@ def extract_contact_info(text):
     
     clean_text = re.sub(r'\s+', ' ', text.strip()).lower()
     
-    name_match = re.search(r'^([а-яa-z]{2,})', clean_text)
-    if name_match:
-        name = name_match.group(1).capitalize()
+    # Улучшенный поиск имени - ищем в любом месте текста
+    name_patterns = [
+        r'(?:имя|меня зовут|зовут)\s*[:\-]?\s*([а-яa-z]{2,})',
+        r'^([а-яa-z]{2,})(?:\s|,|$)',
+        r'([а-яa-z]{2,})\s*(?:\d|,|$)'
+    ]
+    
+    for pattern in name_patterns:
+        name_match = re.search(pattern, clean_text)
+        if name_match:
+            name = name_match.group(1).capitalize()
+            break
     
     phone_patterns = [
         r'(\d{10,11})',
@@ -539,6 +552,7 @@ def chat():
         
         chat_history.append(f"Клиент: {user_message}")
         
+        # Приветствия
         if user_message.lower() in GREETINGS:
             session.update({
                 'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None},
@@ -548,6 +562,7 @@ def chat():
             })
             return jsonify({"response": "Привет! 👋 Я ассистент Post Pro. Помогу рассчитать доставку из Китая в Казахстан!\n\n📦 **Для расчета укажите 4 параметра:**\n• **Вес груза** (в кг)\n• **Тип товара** (мебель, техника, одежда и т.д.)\n• **Габариты** (Д×Ш×В в метрах или сантиметрах)\n• **Город доставки**\n\n💡 **Пример:** \"50 кг мебель в Астану, габариты 120×80×50\""})
         
+        # Если ждем контакты (после показа расчета)
         if waiting_for_contacts:
             name, phone = extract_contact_info(user_message)
             
@@ -575,22 +590,37 @@ def chat():
             else:
                 return jsonify({"response": "Не удалось распознать контакты. Пожалуйста, укажите в формате: 'Имя, 87001234567'"})
         
+        # ОБЩИЕ ВОПРОСЫ - передаем Gemini ДО логики расчетов
+        non_calc_keywords = ['привет', 'как дела', 'что умеешь', 'кто ты', 'погода', 'бот', 'помощь', 'помоги', 'как настроение', 'расскажи о себе', 'что ты']
+        if any(word in user_message.lower() for word in non_calc_keywords):
+            bot_response = get_gemini_response(user_message)
+            chat_history.append(f"Ассистент: {bot_response}")
+            session['chat_history'] = chat_history
+            return jsonify({"response": bot_response})
+        
+        # Обработка специальных команд (только если расчет еще не показан)
         if not calculation_shown:
+            # Запросы об оплате
             if any(word in user_message.lower() for word in ['оплат', 'платеж', 'заплатит', 'деньги', 'как платит', 'наличн', 'безнал', 'kaspi', 'halyk', 'freedom', 'банк']):
                 return jsonify({"response": get_payment_info()})
             
+            # Запросы о тарифах Т1/Т2
             if any(word in user_message.lower() for word in ['т1', 'т2', 'тариф', 'что такое т', 'объясни тариф']):
                 return jsonify({"response": explain_tariffs()})
             
+            # Запросы о заявке (до расчета)
             if any(word in user_message.lower() for word in ['заявк', 'оставь', 'свяж', 'контакт', 'позвон', 'менеджер']):
                 return jsonify({"response": "Сначала давайте рассчитаем стоимость доставки. Укажите вес, тип товара, габариты и город доставки."})
             
+            # Процедура доставки
             if any(word in user_message.lower() for word in ['процедур', 'процесс', 'как достав', 'как получ']):
                 return jsonify({"response": get_delivery_procedure()})
         
+        # Технология
         if any(word in user_message.lower() for word in ['на каком ии', 'какой ии', 'технология']):
             return jsonify({"response": "Я работаю на базе Post Pro ИИ! 🚀"})
         
+        # Извлечение данных о доставке
         weight, product_type, city = extract_delivery_info(user_message)
         length, width, height = extract_dimensions(user_message)
         volume_direct = extract_volume(user_message)
@@ -613,6 +643,7 @@ def chat():
             data_updated = True
             confirmation_parts.append(f"🏙️ **Город:** {city.capitalize()}")
 
+        # Обработка габаритов и объема (объем имеет приоритет)
         if volume_direct and volume_direct != delivery_data.get('volume'):
             delivery_data['volume'] = volume_direct
             delivery_data['length'] = None
@@ -622,7 +653,8 @@ def chat():
             confirmation_parts.append(f"📏 **Объем:** {volume_direct:.3f} м³")
         elif length and width and height:
             calculated_volume = length * width * height
-            if abs(calculated_volume - delivery_data.get('volume', 0)) > 0.001:
+            current_volume = delivery_data.get('volume')
+            if current_volume is None or abs(calculated_volume - current_volume) > 0.001:
                 delivery_data['length'] = length
                 delivery_data['width'] = width
                 delivery_data['height'] = height
@@ -631,9 +663,11 @@ def chat():
                 confirmation_parts.append(f"📐 **Габариты:** {length:.2f}×{width:.2f}×{height:.2f} м")
                 confirmation_parts.append(f"📏 **Объем:** {calculated_volume:.3f} м³")
         
+        # Если данные обновлены, показываем подтверждение
         if data_updated and not calculation_shown:
             response_message = "✅ **Данные обновлены:**\n" + "\n".join(confirmation_parts) + "\n\n"
             
+            # Проверяем наличие всех данных для расчета
             has_all_data = (
                 delivery_data['weight'] and 
                 delivery_data['product_type'] and 
@@ -660,6 +694,7 @@ def chat():
             session['chat_history'] = chat_history
             return jsonify({"response": response_message})
         
+        # Проверка наличия всех данных для расчета
         has_all_data = (
             delivery_data['weight'] and 
             delivery_data['product_type'] and 
@@ -667,6 +702,7 @@ def chat():
             delivery_data.get('volume')
         )
         
+        # Пошаговый сбор данных
         if not has_all_data and not calculation_shown and not data_updated:
             missing_data = []
             if not delivery_data['weight']:
@@ -681,6 +717,7 @@ def chat():
             if missing_data:
                 response_message = "📝 Для расчета укажите: " + ", ".join(missing_data)
                 
+                # Конкретные подсказки
                 if not delivery_data.get('volume') and delivery_data['weight']:
                     response_message += "\n\n💡 **Пример габаритов:** \"1.2×0.8×0.5\" или \"120×80×50\""
                 elif not delivery_data['weight'] and delivery_data.get('volume'):
@@ -690,7 +727,9 @@ def chat():
                 session['chat_history'] = chat_history
                 return jsonify({"response": response_message})
         
+        # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
         if has_all_data and not calculation_shown:
+            # Производим расчет
             quick_cost = calculate_quick_cost(
                 delivery_data['weight'], 
                 delivery_data['product_type'], 
@@ -699,6 +738,7 @@ def chat():
             )
             
             if quick_cost:
+                # Показываем итоговую стоимость
                 total_cost = quick_cost['total']
                 response_message = (
                     f"✅ **Все данные получены!**\n\n"
@@ -711,6 +751,7 @@ def chat():
                     f"📊 Хотите увидеть детальный расчет с разбивкой по тарифам?"
                 )
                 
+                # Сохраняем результат расчета в сессии
                 session['quick_cost'] = quick_cost
                 session['calculation_shown'] = True
                 session['delivery_data'] = delivery_data
@@ -720,7 +761,9 @@ def chat():
             else:
                 return jsonify({"response": "❌ Не удалось рассчитать стоимость. Проверьте правильность введенных данных."})
         
+        # Обработка после показа расчета
         if calculation_shown:
+            # Запрос детального расчета
             if any(word in user_message.lower() for word in ['детальн', 'подробн', 'разбей', 'тариф', 'да', 'yes', 'конечно']):
                 detailed_response = calculate_detailed_cost(
                     session.get('quick_cost'),
@@ -732,18 +775,20 @@ def chat():
                 session['chat_history'] = chat_history
                 return jsonify({"response": detailed_response})
             
+            # Запрос на оформление заявки
             if any(word in user_message.lower() for word in ['заявк', 'оставь', 'свяж', 'контакт', 'позвон', 'менеджер', 'дальше', 'продолж']):
                 session['waiting_for_contacts'] = True
                 session['chat_history'] = chat_history
                 return jsonify({"response": "Отлично! Для связи укажите:\n• Ваше имя\n• Номер телефона\n\nНапример: 'Аслан, 87001234567'"})
         
+        # Обработка общих вопросов через Gemini (fallback)
         context_lines = []
         if len(chat_history) > 0:
             context_lines.append("История диалога:")
             for msg in chat_history[-3:]:
                 context_lines.append(msg)
         
-        context_lines.append("\nТекущие данные:")
+        context_lines.append("\nКонтекст диалога (история + данные):")
         if delivery_data['weight']:
             context_lines.append(f"- Вес: {delivery_data['weight']} кг")
         if delivery_data['product_type']:
@@ -759,6 +804,7 @@ def chat():
         bot_response = get_gemini_response(user_message, context)
         chat_history.append(f"Ассистент: {bot_response}")
         
+        # Ограничение истории
         if len(chat_history) > 8:
             chat_history = chat_history[-8:]
         
