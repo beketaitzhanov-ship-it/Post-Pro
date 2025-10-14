@@ -3,124 +3,452 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PostPro Chat Bot</title>
+    <title>POST PRO Assistant</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cambria:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        * {
             margin: 0;
-            padding: 20px;
-            background-color: #f4f4f4;
+            padding: 0;
+            box-sizing: border-box;
         }
-        #chat-container {
-            max-width: 600px;
-            margin: 0 auto;
+        
+        body {
+            font-family: 'Cambria', 'Times New Roman', serif;
+            background: #f8f9fa;
+            color: #3c4043;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+        }
+        
+        .chat-container {
+            width: 100%;
+            max-width: 900px;
             background: white;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            padding: 20px;
-        }
-        #chat-box {
-            height: 400px;
-            overflow-y: auto;
-            margin-bottom: 20px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        #chat-box div {
-            margin: 10px 0;
-        }
-        #input-container {
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             display: flex;
-            gap: 10px;
+            flex-direction: column;
+            height: 100vh;
+            max-height: 100vh;
+            margin: 0;
         }
-        #user-input {
-            flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        button {
-            padding: 10px 20px;
-            border: none;
-            background-color: #007bff;
+        
+        .header {
+            padding: 8px 16px;
+            border-bottom: 1px solid #e8eaed;
+            background: white;
+            border-radius: 12px 12px 0 0;
+            background: #6e9d90;
             color: white;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        .keyboard {
-            margin-top: 10px;
+            flex-shrink: 0;
             display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
         }
-        .keyboard button {
-            background-color: #28a745;
+        
+        .header-text h1 {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: white;
+            line-height: 1.2;
         }
-        .keyboard button:hover {
-            background-color: #218838;
+        
+        .chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            max-width: 90%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            line-height: 1.4;
+            animation: fadeIn 0.3s ease;
+            font-size: 13px;
+            word-wrap: break-word;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .user-message {
+            background: #6e9d90;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+            align-self: flex-end;
+        }
+        
+        .bot-message {
+            background: white;
+            color: #3c4043;
+            border: 1px solid #e8eaed;
+            border-bottom-left-radius: 4px;
+            align-self: flex-start;
+        }
+        
+        .input-area {
+            padding: 10px 14px;
+            border-top: 1px solid #e8eaed;
+            background: white;
+            border-radius: 0 0 12px 12px;
+            flex-shrink: 0;
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        
+        #message-input {
+            flex-grow: 1;
+            padding: 10px 14px;
+            border: 2px solid #6e9d90;
+            border-radius: 20px;
+            font-size: 14px;
+            font-family: 'Cambria', 'Times New Roman', serif;
+            outline: none;
+            resize: none;
+            min-height: 40px;
+            max-height: 80px;
+            line-height: 1.4;
+            background: #f8f9fa;
+            transition: all 0.2s;
+        }
+        
+        #message-input:focus {
+            background: white;
+            box-shadow: 0 0 0 3px rgba(110, 157, 144, 0.1);
+        }
+        
+        #send-button {
+            padding: 10px 16px;
+            background: #6e9d90;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Cambria', 'Times New Roman', serif;
+            min-width: 60px;
+            min-height: 40px;
+        }
+        
+        #send-button:hover:not(:disabled) {
+            background: #5d8c7f;
+        }
+        
+        #send-button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .typing-indicator {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            padding: 6px 0;
+        }
+        
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: #5f6368;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        .typing-dot:nth-child(3) { animation-delay: 0s; }
+        
+        @keyframes typing {
+            0%, 60%, 100% { transform: scale(0.8); opacity: 0.5; }
+            30% { transform: scale(1); opacity: 1; }
+        }
+        
+        .message-content {
+            white-space: pre-wrap;
+        }
+        
+        /* Мобильная адаптация */
+        @media (max-width: 768px) {
+            body {
+                padding: 0;
+                align-items: stretch;
+            }
+            
+            .chat-container {
+                height: 100vh;
+                max-height: 100vh;
+                border-radius: 0;
+                margin: 0;
+            }
+            
+            .header {
+                padding: 6px 12px;
+                border-radius: 0;
+            }
+            
+            .header-text h1 {
+                font-size: 1rem;
+            }
+            
+            .chat-messages {
+                padding: 8px;
+                gap: 6px;
+            }
+            
+            .message {
+                max-width: 95%;
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            
+            .input-area {
+                padding: 8px 12px;
+            }
+            
+            #message-input {
+                padding: 8px 12px;
+                min-height: 36px;
+                font-size: 13px;
+            }
+            
+            #send-button {
+                padding: 8px 12px;
+                font-size: 12px;
+                min-width: 55px;
+                min-height: 36px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .header {
+                padding: 5px 10px;
+            }
+            
+            .header-text h1 {
+                font-size: 0.9rem;
+            }
+            
+            .chat-messages {
+                padding: 6px;
+                gap: 4px;
+            }
+            
+            .message {
+                max-width: 98%;
+                padding: 6px 10px;
+                font-size: 11px;
+            }
+            
+            .input-area {
+                padding: 6px 10px;
+            }
+            
+            #message-input {
+                padding: 6px 10px;
+                min-height: 32px;
+                font-size: 12px;
+            }
+            
+            #send-button {
+                padding: 6px 10px;
+                font-size: 11px;
+                min-width: 50px;
+                min-height: 32px;
+            }
+        }
+
+        /* Стили для скроллбара */
+        .chat-messages::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 8px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 8px;
+        }
+        
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Гарантия что панель ввода всегда видна */
+        .input-area {
+            position: sticky;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
         }
     </style>
 </head>
 <body>
-    <div id="chat-container">
-        <div id="chat-box"></div>
-        <div id="input-container">
-            <input type="text" id="user-input" placeholder="Введите сообщение...">
-            <button onclick="sendMessage()">Отправить</button>
+    <div class="chat-container">
+        <div class="header">
+            <div class="header-text">
+                <h1>POST PRO Assistant</h1>
+            </div>
+        </div>
+        
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot-message">
+                <div class="message-content">
+🚚 Добро пожаловать в PostPro!
+
+Я помогу вам рассчитать стоимость доставки из Китая в Казахстан.
+
+📦 **КАРГО** - для личных вещей и пробных партий
+📄 **ИНВОЙС** - для коммерческих партий с растаможкой
+
+💡 **Просто напишите:**
+• Вес груза (например: 50 кг)
+• Тип товара (одежда, электроника и т.д.)
+• Город доставки в Казахстане
+
+✨ **Примеры запросов:**
+"50 кг одежды в Астану"
+"Карго 100 кг электроники в Алматы"
+"Инвойс 200 кг мебели в Шымкент 5000 USD"
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-area">
+            <div class="input-container">
+                <textarea 
+                    id="message-input" 
+                    placeholder="Например: 50 кг одежды в Астану" 
+                    rows="1"
+                    aria-label="Введите сообщение"
+                ></textarea>
+                <button id="send-button" aria-label="Отправить сообщение">
+                    Отпр
+                </button>
+            </div>
         </div>
     </div>
 
     <script>
-        async function sendMessage(callbackData = null) {
-            const userInput = document.getElementById('user-input');
-            const message = callbackData || userInput.value.trim();
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const chatMessages = document.getElementById('chat-messages');
+
+        // Автоматическое увеличение высоты textarea
+        messageInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 80) + 'px';
+        });
+
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = isUser ? 'message user-message' : 'message bot-message';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message bot-message';
+            typingDiv.id = 'typing-indicator';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content typing-indicator';
+            contentDiv.innerHTML = `
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            `;
+            
+            typingDiv.appendChild(contentDiv);
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function hideTypingIndicator() {
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
             if (!message) return;
 
-            const chatBox = document.getElementById('chat-box');
-            const userMessageDiv = document.createElement('div');
-            userMessageDiv.textContent = `Вы: ${message}`;
-            chatBox.appendChild(userMessageDiv);
+            addMessage(message, true);
+            messageInput.value = '';
+            messageInput.style.height = 'auto';
+            sendButton.disabled = true;
+
+            showTypingIndicator();
 
             try {
                 const response = await fetch('/chat', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message, callback_data: callbackData })
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({message: message})
                 });
-                const data = await response.json();
 
-                const messageDiv = document.createElement('div');
-                messageDiv.textContent = `Бот: ${data.response}`;
-                chatBox.appendChild(messageDiv);
+                hideTypingIndicator();
 
-                if (data.keyboard) {
-                    const keyboardDiv = document.createElement('div');
-                    keyboardDiv.className = 'keyboard';
-                    data.keyboard.forEach(button => {
-                        const btn = document.createElement('button');
-                        btn.textContent = button.text;
-                        btn.onclick = () => sendMessage(button.callback_data);
-                        keyboardDiv.appendChild(btn);
-                    });
-                    chatBox.appendChild(keyboardDiv);
+                if (!response.ok) {
+                    throw new Error(`Ошибка сети: ${response.status}`);
                 }
 
-                chatBox.scrollTop = chatBox.scrollHeight;
-                if (!callbackData) userInput.value = '';
+                const data = await response.json();
+                addMessage(data.response, false);
+                
             } catch (error) {
-                const errorDiv = document.createElement('div');
-                errorDiv.textContent = 'Ошибка: Не удалось отправить сообщение';
-                chatBox.appendChild(errorDiv);
+                hideTypingIndicator();
+                addMessage('Извините, произошла ошибка при отправке сообщения. Попробуйте снова.', false);
+                console.error('Ошибка:', error);
+            } finally {
+                sendButton.disabled = false;
+                messageInput.focus();
             }
         }
 
-        document.getElementById('user-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
+        // Обработчики событий
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
         });
+
+        // Фокус на поле ввода при загрузке
+        messageInput.focus();
     </script>
 </body>
 </html>
