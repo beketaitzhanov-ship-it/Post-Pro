@@ -40,16 +40,114 @@ def load_config():
 config = load_config()
 
 if config:
-    EXCHANGE_RATE = config.get("EXCHANGE_RATE", 550)
+    EXCHANGE_RATE = config.get("EXCHANGE_RATE", {}).get("rate", 550)
     DESTINATION_ZONES = config.get("DESTINATION_ZONES", {})
     T1_RATES_DENSITY = config.get("T1_RATES_DENSITY", {})
     T2_RATES = config.get("T2_RATES", {})
     CUSTOMS_RATES = config.get("CUSTOMS_RATES", {})
     CUSTOMS_FEES = config.get("CUSTOMS_FEES", {})
     GREETINGS = config.get("GREETINGS", [])
+    PRODUCT_CATEGORIES = config.get("PRODUCT_CATEGORIES", {})
 else:
     logger.error("!!! Приложение запускается с значениями по умолчанию из-за ошибки загрузки config.json")
-    EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS = 550, {}, {}, {}, {}, {}, []
+    EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS, PRODUCT_CATEGORIES = 550, {}, {}, {}, {}, {}, [], {}
+
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С КОНФИГОМ ---
+
+def find_product_category(text, product_categories):
+    """
+    Находит категорию товара по тексту
+    """
+    if not text:
+        return None
+        
+    text_lower = text.lower().strip()
+    
+    for category, data in product_categories.items():
+        for keyword in data["keywords"]:
+            if keyword in text_lower:
+                return category
+    
+    return None
+
+def find_destination_zone(city_name, destination_zones):
+    """
+    Находит зону назначения по названию города
+    """
+    city_lower = city_name.lower().strip()
+    
+    # Прямой поиск
+    if city_lower in destination_zones:
+        return destination_zones[city_lower]
+    
+    # Поиск с учетом возможных опечаток
+    for city, zone in destination_zones.items():
+        if city in city_lower or city_lower in city:
+            return zone
+    
+    return None
+
+def calculate_shipping_cost(category, weight, volume, destination_city):
+    """
+    Полный расчет стоимости доставки
+    """
+    # Определяем зону
+    zone = find_destination_zone(destination_city, DESTINATION_ZONES)
+    if not zone:
+        return "Город не найден"
+    
+    # Определяем тарифы для категории
+    category_rates = T1_RATES_DENSITY.get(category)
+    if not category_rates:
+        return "Категория не найдена"
+    
+    # Расчет плотности и выбор тарифа
+    density = weight / volume if volume > 0 else 0
+    
+    # Логика выбора тарифа по плотности
+    selected_rate = None
+    for rate in category_rates:
+        if density >= rate["min_density"]:
+            selected_rate = rate
+            break
+    
+    if not selected_rate:
+        return "Не удалось подобрать тариф"
+    
+    # Расчет стоимости Т1
+    if selected_rate["unit"] == "kg":
+        t1_cost_usd = weight * selected_rate["price"]
+    else:  # m3
+        t1_cost_usd = volume * selected_rate["price"]
+    
+    t1_cost_kzt = t1_cost_usd * EXCHANGE_RATE
+    
+    # Расчет стоимости Т2
+    city_lower = destination_city.lower()
+    if city_lower == "алматы" or city_lower == "алмата":
+        t2_rate = T2_RATES.get("алматы", 120)
+        zone_name = "алматы"
+    else:
+        t2_rate = T2_RATES.get(str(zone), 250)
+        zone_name = f"зона {zone}"
+    
+    t2_cost_kzt = weight * t2_rate
+    
+    # Итоговая стоимость с комиссией 20%
+    total_cost = (t1_cost_kzt + t2_cost_kzt) * 1.20
+    
+    return {
+        't1_cost': t1_cost_kzt,
+        't2_cost': t2_cost_kzt,
+        'total': total_cost,
+        'zone': zone_name,
+        't2_rate': t2_rate,
+        'volume': volume,
+        'density': density,
+        'rule': selected_rate,
+        't1_cost_usd': t1_cost_usd,
+        'category': category
+    }
 
 # --- ЗАГРУЗКА ПРОМПТА ЛИЧНОСТИ ---
 def load_personality_prompt():
@@ -240,7 +338,12 @@ def get_t1_density_rule(product_type, weight, volume):
 
     density = weight / volume
     
-    rules = T1_RATES_DENSITY.get(product_type.lower())
+    # Используем новую функцию определения категории
+    category = find_product_category(product_type, PRODUCT_CATEGORIES)
+    if not category:
+        category = "мебель"  # категория по умолчанию
+    
+    rules = T1_RATES_DENSITY.get(category.lower())
     if not rules:
         rules = T1_RATES_DENSITY.get("мебель")
     
@@ -273,13 +376,18 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
         
         t1_cost_kzt = cost_usd * EXCHANGE_RATE
         
+        # Используем новую функцию определения зоны
+        zone = find_destination_zone(city, DESTINATION_ZONES)
+        if not zone:
+            return None
+            
         city_lower = city.lower()
         if city_lower == "алматы" or city_lower == "алмата":
             t2_rate = T2_RATES.get("алматы", 120)
-            zone = "алматы"
+            zone_name = "алматы"
         else:
-            zone = DESTINATION_ZONES.get(city_lower, 3)
             t2_rate = T2_RATES.get(str(zone), 250)
+            zone_name = f"зона {zone}"
         
         t2_cost_kzt = weight * t2_rate
         
@@ -287,9 +395,9 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
         
         return {
             't1_cost': t1_cost_kzt,
-            't2_cost': t2_cost_kzt, 
+            't2_cost': t2_cost_kzt,
             'total': total_cost,
-            'zone': zone,
+            'zone': zone_name,
             't2_rate': t2_rate,
             'volume': volume,
             'density': density,
@@ -454,33 +562,15 @@ def extract_delivery_info(text):
                 weight = float(match.group(1))
                 break
         
+        # Используем новую функцию определения города
         text_lower = text.lower()
         for city_name in DESTINATION_ZONES:
             if city_name in text_lower:
                 city = city_name
                 break
         
-        product_keywords = {
-            'мебель': ['мебель', 'стол', 'стул', 'кровать', 'шкаф', 'диван'],
-            'автозапчасти': ['автозапчасти', 'запчасти', 'аксессуары авто', 'авто'],
-            'аксессуары': ['аксессуары', 'сумк', 'ремен', 'очки', 'украшен'],
-            'техника': ['техника', 'телефон', 'ноутбук', 'гаджет', 'электроника'],
-            'продукты': ['продукты', 'еда', 'питание', 'напитки'],
-            'ткани': ['ткани', 'текстиль', 'материал'],
-            'инструменты': ['инструменты', 'инструмент', 'оборудование'],
-            'белье': ['белье', 'бельё', 'белья', 'белью'],
-            'игрушки': ['игрушки', 'игрушк', 'игра'],
-            'одежда': ['одежда', 'адежда', 'одежд', 'костюм', 'платье'],
-            'лекарства': ['лекарства', 'лекарсива', 'медикаменты', 'препарат'],
-            'косметика': ['косметика', 'крем', 'шампунь', 'макияж', 'парфюм'],
-            'посуда': ['посуда', 'тарелки', 'чашки', 'кухонная утварь'],
-            'общие товары': ['товары', 'товар', 'разное', 'прочее', 'прочие']
-        }
-        
-        for prod_type, keywords in product_keywords.items():
-            if any(keyword in text_lower for keyword in keywords):
-                product_type = prod_type
-                break
+        # Используем новую функцию определения категории товара
+        product_type = find_product_category(text, PRODUCT_CATEGORIES)
         
         return weight, product_type, city
     except Exception as e:
