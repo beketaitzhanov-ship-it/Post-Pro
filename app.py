@@ -118,27 +118,139 @@ except Exception as e:
 
 # --- ФУНКЦИИ РАСЧЕТА ---
 def extract_dimensions(text):
-    """Извлекает габариты (длина, ширина, высота) из текста в метрах с конвертацией сантиметров."""
-    pattern = r'(\d+(?:\.\d+)?)\s*[мmxх]?\s*(\d+(?:\.\d+)?)\s*[мmxх]?\s*(\d+(?:\.\d+)?)'
-    match = re.search(pattern, text.lower())
+    """Извлекает габариты (длина, ширина, высота) из текста в любом формате."""
+    # Улучшенное регулярное выражение на основе логики симулятора
+    patterns = [
+        # Основной паттерн: числа с разделителями и возможными единицами измерения
+        r'(?:габарит\w*|размер\w*|дшв|длш|разм)?\s*'  # Ключевые слова в начале
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?\s*'  # Первое число с единицами
+        r'[xх*×на\s\-]+\s*'  # Разделители
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?\s*'  # Второе число с единицами
+        r'[xх*×на\s\-]+\s*'  # Разделители
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?'  # Третье число с единицами
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in patterns:
+        matches = re.finditer(pattern, text_lower)
+        for match in matches:
+            try:
+                # Извлекаем числа, заменяя запятые на точки для корректного преобразования
+                l = float(match.group(1).replace(',', '.'))
+                w = float(match.group(2).replace(',', '.'))
+                h = float(match.group(3).replace(',', '.'))
+                
+                # Логика определения единиц измерения (как в симуляторе)
+                match_text = match.group(0).lower()
+                
+                # Проверяем явные указания на сантиметры
+                has_explicit_cm = any(word in match_text for word in ['см', 'cm', 'сантим'])
+                # Проверяем явные указания на метры
+                has_explicit_m = any(word in match_text for word in ['м', 'm', 'метр'])
+                
+                # Определяем, являются ли числа сантиметрами (логика из симулятора)
+                is_cm = (
+                    has_explicit_cm or  # Явно указаны сантиметры
+                    (l > 5 or w > 5 or h > 5) and not has_explicit_m  # Большие числа без явных метров
+                )
+                
+                # Конвертируем в метры если это сантиметры
+                if is_cm:
+                    l = l / 100
+                    w = w / 100
+                    h = h / 100
+                
+                logger.info(f"Извлечены габариты: {l:.3f}x{w:.3f}x{h:.3f} м (шаблон: {pattern})")
+                return l, w, h
+                
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Ошибка преобразования габаритов: {e}")
+                continue
+    
+    # Дополнительные паттерны для специфических случаев
+    
+    # Паттерн для формата "длина X ширина Y высота Z"
+    pattern_dl_sh_v = r'(?:длин[аы]?|length)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:ширин[аы]?|width)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:высот[аы]?|height)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?'
+    
+    match = re.search(pattern_dl_sh_v, text_lower)
     if match:
         try:
-            length = float(match.group(1))
-            width = float(match.group(2))
-            height = float(match.group(3))
+            l = float(match.group(1).replace(',', '.'))
+            w = float(match.group(2).replace(',', '.'))
+            h = float(match.group(3).replace(',', '.'))
             
-            # Конвертация сантиметров в метры (если число > 5, считаем что это сантиметры)
-            if length > 5:
-                length = length / 100
-            if width > 5:
-                width = width / 100
-            if height > 5:
-                height = height / 100
-                
-            return length, width, height
-        except (ValueError, IndexError):
-            return None, None, None
+            match_text = match.group(0).lower()
+            has_explicit_cm = any(word in match_text for word in ['см', 'cm', 'сантим'])
+            has_explicit_m = any(word in match_text for word in ['м', 'm', 'метр'])
+            
+            is_cm = (
+                has_explicit_cm or
+                (l > 5 or w > 5 or h > 5) and not has_explicit_m
+            )
+            
+            if is_cm:
+                l = l / 100
+                w = w / 100
+                h = h / 100
+            
+            logger.info(f"Извлечены габариты (формат дшв): {l:.3f}x{w:.3f}x{h:.3f} м")
+            return l, w, h
+            
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Ошибка преобразования габаритов дшв: {e}")
+    
+    # Паттерн для трех чисел подряд без явных разделителей
+    pattern_three_numbers = r'(?<!\d)(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)(?!\d)'
+    
+    match = re.search(pattern_three_numbers, text_lower)
+    if match:
+        try:
+            l = float(match.group(1).replace(',', '.'))
+            w = float(match.group(2).replace(',', '.'))
+            h = float(match.group(3).replace(',', '.'))
+            
+            # Для трех чисел без контекста используем эвристику: если все числа > 5, считаем сантиметрами
+            if l > 5 and w > 5 and h > 5:
+                l = l / 100
+                w = w / 100
+                h = h / 100
+            
+            logger.info(f"Извлечены габариты (три числа): {l:.3f}x{w:.3f}x{h:.3f} м")
+            return l, w, h
+            
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Ошибка преобразования трех чисел: {e}")
+    
     return None, None, None
+
+def extract_volume(text):
+    """Извлекает готовый объем из текста в любом формате."""
+    patterns = [
+        # Формат: 0.5 куб.м, 0.5м3, 0.5 куба
+        r'(\d+(?:[.,]\d+)?)\s*(?:куб\.?\s*м|м³|м3|куб\.?|кубическ\w+\s*метр\w*|кубометр\w*)',
+        # Формат: объем 0.5, объемом 0.5 куб
+        r'(?:объем|volume)\w*\s*(\d+(?:[.,]\d+)?)\s*(?:куб\.?\s*м|м³|м3|куб\.?)?',
+        # Формат: 0.5 cubic, 0.5 cub
+        r'(\d+(?:[.,]\d+)?)\s*(?:cubic|cub)',
+        # Просто число с контекстом объема
+        r'(\d+(?:[.,]\d+)?)\s*(?=куб|м³|м3|объем)'
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            try:
+                volume = float(match.group(1).replace(',', '.'))
+                logger.info(f"Извлечен объем: {volume} м³ (шаблон: {pattern})")
+                return volume
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Ошибка преобразования объема: {e}")
+                continue
+    
+    return None
 
 def get_t1_density_rule(product_type, weight, volume):
     """Находит и возвращает правило тарифа Т1 на основе плотности груза."""
@@ -307,7 +419,7 @@ def get_delivery_procedure():
     return """📦 **Процедура доставки:**
 
 1. **Прием груза в Китае:** Ваш груз прибудет на наш склад в Китае (ИУ или Гуанчжоу)
-2. **Осмотр и обработка:** Взвешиваем, фотографируем, упаковываем
+2. **Осмотр и обработка:** Взвешиваем, фотографием, упаковываем
 3. **Подтверждение:** Присылаем детали груза
 4. **Отправка:** Доставляем до Алматы (Т1) или до двери (Т2)
 5. **Получение и оплата:** Забираете груз и оплачиваете удобным способом
@@ -527,18 +639,76 @@ def chat():
         # Извлечение данных о доставке
         weight, product_type, city = extract_delivery_info(user_message)
         length, width, height = extract_dimensions(user_message)
+        volume_direct = extract_volume(user_message)
 
-        if weight:
+        # Обновляем данные в сессии с подтверждением
+        data_updated = False
+        confirmation_parts = []
+
+        if weight and weight != delivery_data['weight']:
             delivery_data['weight'] = weight
-        if product_type:
+            data_updated = True
+            confirmation_parts.append(f"📊 **Вес:** {weight} кг")
+
+        if product_type and product_type != delivery_data['product_type']:
             delivery_data['product_type'] = product_type
-        if city:
+            data_updated = True
+            confirmation_parts.append(f"📦 **Товар:** {product_type}")
+
+        if city and city != delivery_data['city']:
             delivery_data['city'] = city
-        if length and width and height:
-            delivery_data['length'] = length
-            delivery_data['width'] = width  
-            delivery_data['height'] = height
-            delivery_data['volume'] = length * width * height
+            data_updated = True
+            confirmation_parts.append(f"🏙️ **Город:** {city.capitalize()}")
+
+        # Обработка габаритов и объема (объем имеет приоритет)
+        if volume_direct and volume_direct != delivery_data.get('volume'):
+            delivery_data['volume'] = volume_direct
+            delivery_data['length'] = None
+            delivery_data['width'] = None
+            delivery_data['height'] = None
+            data_updated = True
+            confirmation_parts.append(f"📏 **Объем:** {volume_direct:.3f} м³")
+        elif length and width and height:
+            calculated_volume = length * width * height
+            if abs(calculated_volume - delivery_data.get('volume', 0)) > 0.001:  # Учитываем погрешность float
+                delivery_data['length'] = length
+                delivery_data['width'] = width
+                delivery_data['height'] = height
+                delivery_data['volume'] = calculated_volume
+                data_updated = True
+                confirmation_parts.append(f"📐 **Габариты:** {length:.2f}×{width:.2f}×{height:.2f} м")
+                confirmation_parts.append(f"📏 **Объем:** {calculated_volume:.3f} м³")
+        
+        # Если данные обновлены, показываем подтверждение
+        if data_updated and not calculation_shown:
+            response_message = "✅ **Данные обновлены:**\n" + "\n".join(confirmation_parts) + "\n\n"
+            
+            # Проверяем наличие всех данных для расчета
+            has_all_data = (
+                delivery_data['weight'] and 
+                delivery_data['product_type'] and 
+                delivery_data['city'] and 
+                delivery_data.get('volume')
+            )
+            
+            if has_all_data:
+                response_message += "📋 **Все данные собраны!** Готовы к расчету стоимости доставки."
+            else:
+                missing_data = []
+                if not delivery_data['weight']:
+                    missing_data.append("вес груза")
+                if not delivery_data['product_type']:
+                    missing_data.append("тип товара")
+                if not delivery_data.get('volume'):
+                    missing_data.append("габариты или объем")
+                if not delivery_data['city']:
+                    missing_data.append("город доставки")
+                
+                response_message += f"📝 **Осталось указать:** {', '.join(missing_data)}"
+            
+            session['delivery_data'] = delivery_data
+            session['chat_history'] = chat_history
+            return jsonify({"response": response_message})
         
         # Проверка наличия всех данных для расчета
         has_all_data = (
@@ -549,7 +719,7 @@ def chat():
         )
         
         # Пошаговый сбор данных
-        if not has_all_data and not calculation_shown:
+        if not has_all_data and not calculation_shown and not data_updated:
             missing_data = []
             if not delivery_data['weight']:
                 missing_data.append("вес груза (в кг)")
@@ -670,4 +840,3 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
