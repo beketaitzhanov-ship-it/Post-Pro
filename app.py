@@ -451,15 +451,28 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
             return None
             
         city_lower = city.lower()
-        if city_lower == "алматы" or city_lower == "алмата":
-            t2_rate = T2_RATES.get("алматы", 120)
-            zone_name = "алматы"
+        
+        # ОБНОВЛЕННАЯ ЛОГИКА РАСЧЕТА Т2
+        # Ищем тариф для конкретного города или зоны
+        t2_rate = None
+        
+        # Сначала проверяем конкретный город
+        if city_lower in T2_RATES:
+            t2_rate = T2_RATES[city_lower]
+            zone_name = city.capitalize()
+        # Затем проверяем зону
+        elif str(zone) in T2_RATES:
+            t2_rate = T2_RATES[str(zone)]
+            zone_name = f"зона {zone}"
         else:
-            t2_rate = T2_RATES.get(str(zone), 250)
+            # Тариф по умолчанию
+            t2_rate = T2_RATES.get("default", 250)
             zone_name = f"зона {zone}"
         
+        # Расчет стоимости Т2
         t2_cost_kzt = weight * t2_rate
         
+        # Итоговая стоимость с комиссией 20%
         total_cost = (t1_cost_kzt + t2_cost_kzt) * 1.20
         
         return {
@@ -1058,5 +1071,6 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
