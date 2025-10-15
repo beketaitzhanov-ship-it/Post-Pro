@@ -692,11 +692,23 @@ def extract_contact_info(text):
             name = name_before_comma.group(1).capitalize()
     
     return name, phone
-
-@app.route('/')
-def index():
-    session.clear()
-    return render_template('index.html')
+    
+# ↓↓↓ ВСТАВИТЬ ЗДЕСЬ - основная функция обработки (версия с обработкой ошибок) ↓↓↓
+def handle_message_universal(user_id, message):
+    intent_manager = SmartIntentManager()
+    
+    try:
+        if intent_manager.should_switch_to_delivery(message):
+            response = generate_delivery_response(message)
+            return response
+        else:
+            intent_type = intent_manager.get_intent_type(message)
+            response = generate_free_response(message, intent_type)
+            return response
+    except NameError as e:
+        logger.error(f"Function not found: {e}")
+        return "⚠️ Системная ошибка: функции обработки не найдены"
+# ↑↑↑ КОНЕЦ ВСТАВКИ ФУНКЦИИ ↑↑↑
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -990,4 +1002,5 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
