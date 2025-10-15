@@ -90,7 +90,6 @@ class SmartIntentManager:
 
 # --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
 
-# --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
 def load_config():
     """Загружает конфигурацию из файла config.json."""
     try:
@@ -1086,6 +1085,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
