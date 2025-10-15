@@ -29,7 +29,7 @@ class SmartIntentManager:
             self.config = json.load(f)
     
     def should_switch_to_delivery(self, message):
-    message_lower = message.lower()
+    message_lower = message.lower()  # ← ДОБАВИТЬ ОТСТУП
     
     # 1. Проверяем числа с единицами измерения (строгая проверка)
     has_parameters = self._has_delivery_parameters(message_lower)
@@ -1086,6 +1086,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
