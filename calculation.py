@@ -1,0 +1,433 @@
+# calculation.py - модуль для расчетов стоимости доставки
+import re
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Константы тарифов Т2 для крупногабаритных посылок
+T2_RATES_DETAILED = {
+    "large_parcel": {
+        "weight_ranges": [
+            {"max": 1, "zones": {"1": 2205, "2": 2310, "3": 2415, "4": 2520, "5": 2625}},
+            {"max": 2, "zones": {"1": 2310, "2": 2420, "3": 2530, "4": 2640, "5": 2750}},
+            {"max": 3, "zones": {"1": 2415, "2": 2530, "3": 2645, "4": 2760, "5": 2875}},
+            {"max": 4, "zones": {"1": 2520, "2": 2640, "3": 2760, "4": 2880, "5": 3000}},
+            {"max": 5, "zones": {"1": 2625, "2": 2750, "3": 2875, "4": 3000, "5": 3125}},
+            {"max": 6, "zones": {"1": 2730, "2": 2860, "3": 2990, "4": 3120, "5": 3250}},
+            {"max": 7, "zones": {"1": 2835, "2": 2970, "3": 3105, "4": 3240, "5": 3375}},
+            {"max": 8, "zones": {"1": 2940, "2": 3080, "3": 3220, "4": 3360, "5": 3500}},
+            {"max": 9, "zones": {"1": 3045, "2": 3190, "3": 3335, "4": 3480, "5": 3625}},
+            {"max": 10, "zones": {"1": 3150, "2": 3300, "3": 3450, "4": 3600, "5": 3750}},
+            {"max": 11, "zones": {"1": 3255, "2": 3410, "3": 3565, "4": 3720, "5": 3875}},
+            {"max": 12, "zones": {"1": 3360, "2": 3520, "3": 3680, "4": 3840, "5": 4000}},
+            {"max": 13, "zones": {"1": 3465, "2": 3630, "3": 3795, "4": 3960, "5": 4125}},
+            {"max": 14, "zones": {"1": 3570, "2": 3740, "3": 3910, "4": 4080, "5": 4250}},
+            {"max": 15, "zones": {"1": 3675, "2": 3850, "3": 4025, "4": 4200, "5": 4375}},
+            {"max": 16, "zones": {"1": 3780, "2": 3960, "3": 4140, "4": 4320, "5": 4500}},
+            {"max": 17, "zones": {"1": 3885, "2": 4070, "3": 4255, "4": 4440, "5": 4625}},
+            {"max": 18, "zones": {"1": 3990, "2": 4180, "3": 4370, "4": 4560, "5": 4750}},
+            {"max": 19, "zones": {"1": 4095, "2": 4290, "3": 4485, "4": 4680, "5": 4875}},
+            {"max": 20, "zones": {"1": 4200, "2": 4400, "3": 4600, "4": 4800, "5": 5000}}
+        ],
+        "extra_kg_rate": {"1": 220, "2": 230, "3": 240, "4": 250, "5": 260}
+    },
+    "coefficients": {
+        "careful_handling": 1.5,
+        "rural_delivery": 2.0
+    },
+    "additional_services": {
+        "declared_value": 0.01,
+        "storage_per_day": 500,
+        "loading_unloading_per_kg": 50
+    }
+}
+
+def calculate_t2_cost(weight, zone):
+    """
+    Расчет стоимости Т2 для крупногабаритных посылок
+    по официальным тарифам Казпочты
+    """
+    try:
+        weight_ranges = T2_RATES_DETAILED["large_parcel"]["weight_ranges"]
+        extra_kg_rate = T2_RATES_DETAILED["large_parcel"]["extra_kg_rate"]
+        
+        # Находим базовую стоимость для веса до 20 кг
+        base_cost = None
+        for weight_range in weight_ranges:
+            if weight <= weight_range["max"]:
+                base_cost = weight_range["zones"].get(str(zone))
+                break
+        
+        # Если вес больше 20 кг, применяем дополнительную ставку
+        if weight > 20:
+            if base_cost is None:
+                # Берем стоимость за 20 кг как базовую
+                base_cost = weight_ranges[-1]["zones"].get(str(zone), 0)
+            
+            extra_weight = weight - 20
+            extra_cost = extra_weight * extra_kg_rate.get(str(zone), 0)
+            total_cost = base_cost + extra_cost
+        else:
+            total_cost = base_cost if base_cost is not None else 0
+        
+        return total_cost
+        
+    except Exception as e:
+        logger.error(f"Ошибка расчета Т2: {e}")
+        return None
+
+def calculate_large_parcel_cost(weight, zone, is_door_to_door=True):
+    """
+    Расчет стоимости для крупногабаритной посылки
+    """
+    try:
+        # Для услуги "До двери" используем специальные тарифы
+        if is_door_to_door:
+            return calculate_t2_cost(weight, zone)
+        else:
+            # Для других услуг можно добавить соответствующую логику
+            return calculate_t2_cost(weight, zone) * 0.8  # Пример: скидка 20% для самовывоза
+            
+    except Exception as e:
+        logger.error(f"Ошибка расчета крупногабаритной посылки: {e}")
+        return None
+
+def extract_dimensions(text):
+    """Извлекает габариты (длина, ширина, высота) из текста в любом формате."""
+    patterns = [
+        r'(?:габарит\w*|размер\w*|дшв|длш|разм)?\s*'
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?\s*'
+        r'[xх*×на\s\-]+\s*'
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?\s*'
+        r'[xх*×на\s\-]+\s*'
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?'
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in patterns:
+        matches = re.finditer(pattern, text_lower)
+        for match in matches:
+            try:
+                l = float(match.group(1).replace(',', '.'))
+                w = float(match.group(2).replace(',', '.'))
+                h = float(match.group(3).replace(',', '.'))
+                
+                match_text = match.group(0).lower()
+                has_explicit_cm = any(word in match_text for word in ['см', 'cm', 'сантим'])
+                has_explicit_m = any(word in match_text for word in ['м', 'm', 'метр'])
+                
+                is_cm = (
+                    has_explicit_cm or
+                    (l > 5 or w > 5 or h > 5) and not has_explicit_m
+                )
+                
+                if is_cm:
+                    l = l / 100
+                    w = w / 100
+                    h = h / 100
+                
+                logger.info(f"Извлечены габариты: {l:.3f}x{w:.3f}x{h:.3f} м")
+                return l, w, h
+                
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Ошибка преобразования габаритов: {e}")
+                continue
+    
+    pattern_dl_sh_v = r'(?:длин[аы]?|length)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:ширин[аы]?|width)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:высот[аы]?|height)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?'
+    
+    match = re.search(pattern_dl_sh_v, text_lower)
+    if match:
+        try:
+            l = float(match.group(1).replace(',', '.'))
+            w = float(match.group(2).replace(',', '.'))
+            h = float(match.group(3).replace(',', '.'))
+            
+            match_text = match.group(0).lower()
+            has_explicit_cm = any(word in match_text for word in ['см', 'cm', 'сантим'])
+            has_explicit_m = any(word in match_text for word in ['м', 'm', 'метр'])
+            
+            is_cm = (
+                has_explicit_cm or
+                (l > 5 or w > 5 or h > 5) and not has_explicit_m
+            )
+            
+            if is_cm:
+                l = l / 100
+                w = w / 100
+                h = h / 100
+            
+            logger.info(f"Извлечены габариты (формат дшв): {l:.3f}x{w:.3f}x{h:.3f} м")
+            return l, w, h
+            
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Ошибка преобразования габаритов дшв: {e}")
+    
+    pattern_three_numbers = r'(?<!\d)(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)(?!\d)'
+    
+    match = re.search(pattern_three_numbers, text_lower)
+    if match:
+        try:
+            l = float(match.group(1).replace(',', '.'))
+            w = float(match.group(2).replace(',', '.'))
+            h = float(match.group(3).replace(',', '.'))
+            
+            if l > 5 and w > 5 and h > 5:
+                l = l / 100
+                w = w / 100
+                h = h / 100
+            
+            logger.info(f"Извлечены габариты (три числа): {l:.3f}x{w:.3f}x{h:.3f} м")
+            return l, w, h
+            
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Ошибка преобразования трех чисел: {e}")
+    
+    return None, None, None
+
+def extract_volume(text):
+    """Извлекает готовый объем из текста в любом формате."""
+    patterns = [
+        r'(\d+(?:[.,]\d+)?)\s*(?:куб\.?\s*м|м³|м3|куб\.?|кубическ\w+\s*метр\w*|кубометр\w*)',
+        r'(?:объем|volume)\w*\s*(\d+(?:[.,]\d+)?)\s*(?:куб\.?\s*м|м³|м3|куб\.?)?',
+        r'(\d+(?:[.,]\d+)?)\s*(?:cubic|cub)',
+        r'(\d+(?:[.,]\d+)?)\s*(?=куб|м³|м3|объем)'
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            try:
+                volume = float(match.group(1).replace(',', '.'))
+                logger.info(f"Извлечен объем: {volume} м³")
+                return volume
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Ошибка преобразования объема: {e}")
+                continue
+    
+    return None
+
+def find_product_category(text, product_categories):
+    """
+    Находит категорию товара по тексту
+    """
+    if not text:
+        return None
+        
+    text_lower = text.lower().strip()
+    
+    for category, data in product_categories.items():
+        for keyword in data["keywords"]:
+            if keyword in text_lower:
+                return category
+    
+    return None
+
+def find_destination_zone(city_name, destination_zones):
+    """
+    Находит зону назначения по названию города
+    """
+    city_lower = city_name.lower().strip()
+    
+    # Прямой поиск
+    if city_lower in destination_zones:
+        return destination_zones[city_lower]
+    
+    # Поиск с учетом возможных опечаток
+    for city, zone in destination_zones.items():
+        if city in city_lower or city_lower in city:
+            return zone
+    
+    return None
+
+def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
+    """Находит и возвращает правило тарифа Т1 на основе плотности груза."""
+    if not volume or volume <= 0:
+        return None, None
+
+    density = weight / volume
+    
+    # Используем новую функцию определения категории
+    category = find_product_category(product_type, T1_RATES_DENSITY)
+    if not category:
+        category = "мебель"  # категория по умолчанию
+    
+    rules = T1_RATES_DENSITY.get(category.lower())
+    if not rules:
+        rules = T1_RATES_DENSITY.get("мебель")
+    
+    # Проверка на наличие правил
+    if not rules:
+        return None, density
+
+    for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
+        if density >= rule['min_density']:
+            return rule, density
+            
+    return None, density
+
+def calculate_quick_cost(weight, product_type, city, volume, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES):
+    """Быстрый расчет стоимости - единый центр всех расчетов"""
+    try:
+        rule, density = get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY)
+        if not rule:
+            return None
+        
+        price = rule['price']
+        unit = rule['unit']
+        
+        if unit == "kg":
+            cost_usd = price * weight
+        elif unit == "m3":
+            cost_usd = price * volume
+        else:
+            cost_usd = price * weight 
+        
+        t1_cost_kzt = cost_usd * EXCHANGE_RATE
+        
+        # Используем новую функцию определения зоны
+        zone = find_destination_zone(city, DESTINATION_ZONES)
+        if not zone:
+            return None
+            
+        city_lower = city.lower()
+        
+        # ОБНОВЛЕННАЯ ЛОГИКА РАСЧЕТА Т2
+        # Ищем тариф для конкретного города или зоны
+        t2_rate = None
+        
+        # Сначала проверяем конкретный город
+        if city_lower in T2_RATES:
+            t2_rate = T2_RATES[city_lower]
+            zone_name = city.capitalize()
+        # Затем проверяем зону
+        elif str(zone) in T2_RATES:
+            t2_rate = T2_RATES[str(zone)]
+            zone_name = f"зона {zone}"
+        else:
+            # Тариф по умолчанию
+            t2_rate = T2_RATES.get("default", 250)
+            zone_name = f"зона {zone}"
+        
+        # Расчет стоимости Т2
+        t2_cost_kzt = weight * t2_rate
+        
+        # Итоговая стоимость с комиссией 20%
+        total_cost = (t1_cost_kzt + t2_cost_kzt) * 1.20
+        
+        return {
+            't1_cost': t1_cost_kzt,
+            't2_cost': t2_cost_kzt,
+            'total': total_cost,
+            'zone': zone_name,
+            't2_rate': t2_rate,
+            'volume': volume,
+            'density': density,
+            'rule': rule,
+            't1_cost_usd': cost_usd
+        }
+    except Exception as e:
+        logger.error(f"Ошибка расчета: {e}")
+        return None
+
+def calculate_detailed_cost(quick_cost, weight, product_type, city, EXCHANGE_RATE):
+    """Детальный расчет с разбивкой по плотности"""
+    if not quick_cost:
+        return "Ошибка расчета"
+    
+    t1_cost = quick_cost['t1_cost']
+    t2_cost = quick_cost['t2_cost'] 
+    total = quick_cost['total']
+    zone = quick_cost['zone']
+    t2_rate = quick_cost['t2_rate']
+    volume = quick_cost['volume']
+    density = quick_cost['density']
+    rule = quick_cost['rule']
+    t1_cost_usd = quick_cost['t1_cost_usd']
+    
+    price = rule['price']
+    unit = rule['unit']
+    if unit == "kg":
+        calculation_text = f"${price}/кг × {weight} кг = ${t1_cost_usd:.2f} USD"
+    elif unit == "m3":
+        calculation_text = f"${price}/м³ × {volume:.3f} м³ = ${t1_cost_usd:.2f} USD"
+    else:
+        calculation_text = f"${price}/кг × {weight} кг = ${t1_cost_usd:.2f} USD"
+    
+    city_name = city.capitalize()
+    
+    # ОБНОВЛЕННАЯ ЛОГИКА ОПИСАНИЯ Т2
+    if "алматы" in zone.lower() or "алмата" in zone.lower():
+        t2_explanation = f"• Доставка по городу Алматы до вашего адреса"
+        zone_text = "город Алматы"
+        comparison_text = f"💡 **Если самовывоз со склада в Алматы:** {t1_cost:.0f} тенге"
+    elif "астана" in zone.lower():
+        t2_explanation = f"• Доставка до вашего адреса в Астане"
+        zone_text = "город Астана"
+        comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost:.0f} тенге"
+    else:
+        t2_explanation = f"• Доставка до вашего адреса в {city_name}"
+        zone_text = f"{zone}"
+        comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost:.0f} тенге"
+    
+    response = (
+        f"📊 **Детальный расчет для {weight} кг «{product_type}» в г. {city_name}:**\n\n"
+        
+        f"**Т1: Доставка из Китая до Алматы**\n"
+        f"• Плотность вашего груза: **{density:.1f} кг/м³**\n"
+        f"• Применен тариф Т1: **${price} за {unit}**\n"
+        f"• Расчет: {calculation_text}\n"
+        f"• По курсу {EXCHANGE_RATE} тенге/$ = **{t1_cost:.0f} тенге**\n\n"
+        
+        f"**Т2: Доставка до двери ({zone_text})**\n"
+        f"{t2_explanation}\n"
+        f"• {t2_rate} тенге/кг × {weight} кг = **{t2_cost:.0f} тенге**\n\n"
+        
+        f"**Комиссия компании (20%):**\n"
+        f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = **{(t1_cost + t2_cost) * 0.20:.0f} тенге**\n\n"
+        
+        f"------------------------------------\n"
+        f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:,.0f} тенгe**\n\n"
+        
+        f"{comparison_text}\n\n"
+        f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
+        f"💳 **Оплата:** пост-оплата при получении\n\n"
+        f"✅ **Оставить заявку?** Напишите ваше имя и телефон!\n"
+        f"🔄 **Новый расчет?** Напишите **Старт**"
+    )
+    return response
+
+def extract_delivery_info(text, DESTINATION_ZONES, PRODUCT_CATEGORIES):
+    """Извлечение данных о доставки"""
+    weight = None
+    product_type = None
+    city = None
+    
+    try:
+        weight_patterns = [
+            r'(\d+(?:\.\d+)?)\s*(?:кг|kg|килограмм|кило)',
+            r'вес\s*[:\-]?\s*(\d+(?:\.\d+)?)',
+        ]
+        
+        for pattern in weight_patterns:
+            match = re.search(pattern, text.lower())
+            if match:
+                weight = float(match.group(1))
+                break
+        
+        # Используем новую функцию определения города
+        text_lower = text.lower()
+        for city_name in DESTINATION_ZONES:
+            if city_name in text_lower:
+                city = city_name
+                break
+        
+        # Используем новую функцию определения категории товара
+        product_type = find_product_category(text, PRODUCT_CATEGORIES)
+        
+        return weight, product_type, city
+    except Exception as e:
+        logger.error(f"Ошибка извлечения данных: {e}")
+        return None, None, None
