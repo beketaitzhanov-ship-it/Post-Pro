@@ -59,7 +59,7 @@ class SmartIntentManager:
         # АКТИВИРУЕМ РЕЖИМ ДОСТАВКИ ТОЛЬКО ЕСЛИ:
         # - Есть параметры (числа + единицы) ИЛИ
         # - Явный запрос доставки И параметры/город/товар
-        if has_parameters or (has_delivery_keywords and (has_parameters or has_city or has_product)):
+        if has_parameters or (has_delivery_keywords and (has_city or has_product)):
             return True
         
         # ВСЕ остальные случаи - свободный диалог
@@ -1084,6 +1084,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
