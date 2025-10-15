@@ -515,13 +515,19 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
         calculation_text = f"${price}/кг × {weight} кг = ${t1_cost_usd:.2f} USD"
     
     city_name = city.capitalize()
-    if zone == "алматы":
+    
+    # ОБНОВЛЕННАЯ ЛОГИКА ОПИСАНИЯ Т2
+    if "алматы" in zone.lower() or "алмата" in zone.lower():
         t2_explanation = f"• Доставка по городу Алматы до вашего адреса"
         zone_text = "город Алматы"
         comparison_text = f"💡 **Если самовывоз со склада в Алматы:** {t1_cost:.0f} тенге"
+    elif "астана" in zone.lower():
+        t2_explanation = f"• Доставка до вашего адреса в Астане"
+        zone_text = "город Астана"
+        comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost:.0f} тенге"
     else:
         t2_explanation = f"• Доставка до вашего адреса в {city_name}"
-        zone_text = f"Зона {zone}"
+        zone_text = f"{zone}"
         comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost:.0f} тенге"
     
     response = (
@@ -1071,6 +1077,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
