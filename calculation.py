@@ -268,9 +268,17 @@ def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
             
     return None, density
 
-def calculate_quick_cost(weight, product_type, city, volume, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES):
+def calculate_quick_cost(weight, product_type, city, volume, EXCHANGE_RATE=550, DESTINATION_ZONES=None, T1_RATES_DENSITY=None, T2_RATES=None):
     """Быстрый расчет стоимости - единый центр всех расчетов"""
     try:
+        # Инициализация значений по умолчанию
+        if DESTINATION_ZONES is None:
+            DESTINATION_ZONES = {}
+        if T1_RATES_DENSITY is None:
+            T1_RATES_DENSITY = {}
+        if T2_RATES is None:
+            T2_RATES = {}
+            
         rule, density = get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY)
         if not rule:
             return None
