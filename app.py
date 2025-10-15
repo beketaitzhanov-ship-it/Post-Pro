@@ -569,20 +569,43 @@ def chat():
                     confirmation_parts.append(f"📏 **Объем:** {calculated_volume:.3f} м³")
         
         # Если данные обновлены, показываем подтверждение
-        if data_updated and not calculation_shown:
-            response_message = "✅ **Данные обновлены:**\n" + "\n".join(confirmation_parts) + "\n\n"
-            
-            # Проверяем наличие всех данных для расчета
-            has_all_data = (
-                delivery_data['weight'] and 
-                delivery_data['product_type'] and 
-                delivery_data['city'] and 
-                delivery_data.get('volume')
-            )
-            
-            if has_all_data:
-                response_message += "📋 **Все данные собраны!** Готовы к расчету стоимости доставки."
-            else:
+        # Весь блок выше заменяется на этот
+# Шаг 1: Обновляем данные в сессии из сообщения пользователя.
+delivery_data.update(extract_delivery_info(user_message, DESTINATION_ZONES, PRODUCT_CATEGORIES) or {})
+
+# Шаг 2: Проводим строгую проверку, есть ли у нас ВСЕ 4 обязательных параметра.
+has_all_data = (
+    delivery_data.get('weight') and 
+    delivery_data.get('product_type') and 
+    delivery_data.get('city') and 
+    delivery_data.get('volume')
+)
+
+# Шаг 3: Действуем строго по результату проверки.
+if has_all_data:
+    # ЕСЛИ ВСЕ ДАННЫЕ ЕСТЬ - СРАЗУ СЧИТАЕМ. Без лишних вопросов "да".
+    quick_cost = calculate_quick_cost(...) # вызов функции расчета
+    if quick_cost:
+        response_message = calculate_detailed_cost(...) # форматируем ответ
+        session['calculation_shown'] = True
+        session['waiting_for_contacts'] = True 
+    else:
+        response_message = "❌ Не удалось рассчитать стоимость. Проверьте правильность введенных данных."
+
+else:
+    # ЕСЛИ ДАННЫХ НЕ ХВАТАЕТ - вежливо просим их предоставить.
+    missing_data = []
+    if not delivery_data.get('weight'): missing_data.append("вес груза")
+    if not delivery_data.get('product_type'): missing_data.append("тип товара")
+    if not delivery_data.get('volume'): missing_data.append("габариты или объем")
+    if not delivery_data.get('city'): missing_data.append("город доставки")
+    
+    response_message = f"📝 **Для расчета укажите:** {', '.join(missing_data)}"
+
+# Возвращаем результат
+session['delivery_data'] = delivery_data
+session['chat_history'] = chat_history
+return jsonify({"response": response_message})
                 missing_data = []
                 if not delivery_data['weight']:
                     missing_data.append("вес груза")
@@ -751,4 +774,5 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
