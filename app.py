@@ -29,43 +29,43 @@ class SmartIntentManager:
             self.config = json.load(f)
     
     def should_switch_to_delivery(self, message):
-    message_lower = message.lower()  # ← ДОБАВИТЬ ОТСТУП 4 ПРОБЕЛА!
-    
-    # 1. Проверяем числа с единицами измерения (строгая проверка)
-    has_parameters = self._has_delivery_parameters(message_lower)  # ← ОТСТУП
-    
-    # 2. Проверяем ключевые слова параметров (дополнительная проверка)
-    has_parameter_keywords = any(  # ← ОТСТУП
-        keyword in message_lower 
-        for keyword in self.config["delivery_triggers"]["parameter_keywords"]
-    )
-    
-    # 3. Проверяем явные ключевые слова доставки
-    has_delivery_keywords = any(  # ← ОТСТУП
-        keyword in message_lower 
-        for keyword in self.config["delivery_triggers"]["explicit_keywords"]
-    )
-    
-    # 4. Проверяем города доставки
-    has_city = any(  # ← ОТСТУП
-        city in message_lower 
-        for city in self.config["delivery_triggers"]["city_keywords"]
-    )
-    
-    # 5. Проверяем типы товаров
-    has_product = any(  # ← ОТСТУП
-        product in message_lower 
-        for product in self.config["delivery_triggers"]["product_keywords"]
-    )
-    
-    # АКТИВИРУЕМ РЕЖИМ ДОСТАВКИ ТОЛЬКО ЕСЛИ:
-    # - Есть параметры (числа + единицы) ИЛИ есть слова параметров ИЛИ
-    # - Явный запрос доставки И (есть город ИЛИ есть товар ИЛИ есть слова параметров)
-    if has_parameters or has_parameter_keywords or (has_delivery_keywords and (has_city or has_product or has_parameter_keywords)):  # ← ОТСТУП
-        return True  # ← ОТСТУП
-    
-    # ВСЕ остальные случаи - свободный диалог
-    return False  # ← ОТСТУП
+        message_lower = message.lower()
+        
+        # 1. Проверяем числа с единицами измерения (строгая проверка)
+        has_parameters = self._has_delivery_parameters(message_lower)
+        
+        # 2. Проверяем ключевые слова параметров (дополнительная проверка)
+        has_parameter_keywords = any(
+            keyword in message_lower 
+            for keyword in self.config["delivery_triggers"]["parameter_keywords"]
+        )
+        
+        # 3. Проверяем явные ключевые слова доставки
+        has_delivery_keywords = any(
+            keyword in message_lower 
+            for keyword in self.config["delivery_triggers"]["explicit_keywords"]
+        )
+        
+        # 4. Проверяем города доставки
+        has_city = any(
+            city in message_lower 
+            for city in self.config["delivery_triggers"]["city_keywords"]
+        )
+        
+        # 5. Проверяем типы товаров
+        has_product = any(
+            product in message_lower 
+            for product in self.config["delivery_triggers"]["product_keywords"]
+        )
+        
+        # АКТИВИРУЕМ РЕЖИМ ДОСТАВКИ ТОЛЬКО ЕСЛИ:
+        # - Есть параметры (числа + единицы) ИЛИ есть слова параметров ИЛИ
+        # - Явный запрос доставки И (есть город ИЛИ есть товар ИЛИ есть слова параметров)
+        if has_parameters or has_parameter_keywords or (has_delivery_keywords and (has_city or has_product or has_parameter_keywords)):
+            return True
+        
+        # ВСЕ остальные случаи - свободный диалог
+        return False
     
     def _has_delivery_parameters(self, message_lower):
         """Проверяет наличие параметров доставки"""
@@ -172,7 +172,7 @@ def calculate_shipping_cost(category, weight, volume, destination_city):
         return "Категория не найдена"
     
     # Расчет плотности и выбор тарифа
-    density = weight / volume if volume > 0 else 0
+    density = weight / volume if volume and volume > 0 else 0
     
     # Логика выбора тарифа по плотности
     selected_rate = None
@@ -771,23 +771,6 @@ def generate_free_response(message, intent_type=None):
         logger.error(f"Ошибка в generate_free_response: {e}")
         return "💬 Давайте поговорим о чем-то другом! Чем еще могу помочь?"
 # 🎯 КОНЕЦ_НОВЫХ_ФУНКЦИЙ
-    
-# ↓↓↓ ВСТАВИТЬ ЗДЕСЬ - основная функция обработки (версия с обработкой ошибок) ↓↓↓
-def handle_message_universal(user_id, message):
-    intent_manager = SmartIntentManager()
-    
-    try:
-        if intent_manager.should_switch_to_delivery(message):
-            response = generate_delivery_response(message)
-            return response
-        else:
-            intent_type = intent_manager.get_intent_type(message)
-            response = generate_free_response(message, intent_type)
-            return response
-    except NameError as e:
-        logger.error(f"Function not found: {e}")
-        return "⚠️ Системная ошибка: функции обработки не найдены"
-# ↑↑↑ КОНЕЦ ВСТАВКИ ФУНКЦИИ ↑↑↑
 
 @app.route('/')
 def index():
@@ -1085,15 +1068,3 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
-
-
-
-
-
-
-
-
-
-
-
