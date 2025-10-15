@@ -399,8 +399,242 @@ def calculate_detailed_cost(quick_cost, weight, product_type, city, EXCHANGE_RAT
     )
     return response
 
+def parse_multiple_items(text):
+    """
+    Разбирает текст с несколькими товарами
+    Возвращает список словарей с данными по каждому товару
+    """
+    items = []
+    
+    # Паттерны для поиска различных форматов
+    patterns = [
+        # Формат: "5 коробок вещей размеры 45х40х40 по 40 кг"
+        r'(\d+)\s*(?:коробк\w+|шт|штук\w+)\s+([^0-9]+?)\s*(?:размер\w*|габарит\w*)?\s*(\d+)[xх×](\d+)[xх×](\d+).*?(?:по|вес)\s*(\d+(?:[.,]\d+)?)\s*кг',
+        
+        # Формат: "3 коробки посуды 60х90х90 70 кг"
+        r'(\d+)\s*(?:коробк\w+|шт|штук\w+|паллет\w+|мешк\w+|ящик\w+)\s+([^0-9]+?)\s*(?:размер\w*|габарит\w*)?\s*(\d+)[xх×](\d+)[xх×](\d+).*?(\d+(?:[.,]\d+)?)\s*кг',
+        
+        # Формат: "1 паллет техники 100х120х110 400 кг"
+        r'(\d+)\s*(?:паллет\w+|коробк\w+|мешк\w+|ящик\w+)\s+([^0-9]+?)\s*(\d+)[xх×](\d+)[xх×](\d+).*?(\d+(?:[.,]\d+)?)\s*кг',
+        
+        # Формат с указанием "по X кг" в конце
+        r'(\d+)\s*(?:коробк\w+|шт|штук\w+)\s+([^0-9]+?)\s*(?:размер\w*)?\s*(\d+)[xх×](\d+)[xх×](\d+).*?по\s*(\d+(?:[.,]\d+)?)\s*кг',
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in patterns:
+        matches = re.finditer(pattern, text_lower)
+        for match in matches:
+            try:
+                quantity = int(match.group(1))
+                product_type = match.group(2).strip()
+                length = float(match.group(3).replace(',', '.'))
+                width = float(match.group(4).replace(',', '.'))
+                height = float(match.group(5).replace(',', '.'))
+                weight_per_unit = float(match.group(6).replace(',', '.'))
+                
+                # Автоматически определяем единицы измерения (см или м)
+                if length > 10 or width > 10 or height > 10:
+                    # Если числа большие, предполагаем что это см
+                    length = length / 100
+                    width = width / 100
+                    height = height / 100
+                
+                volume_per_unit = length * width * height
+                total_weight = quantity * weight_per_unit
+                total_volume = quantity * volume_per_unit
+                
+                item = {
+                    'quantity': quantity,
+                    'product_type': product_type,
+                    'dimensions': {
+                        'length': length,
+                        'width': width, 
+                        'height': height,
+                        'string': f"{length*100:.0f}×{width*100:.0f}×{height*100:.0f} см"
+                    },
+                    'weight_per_unit': weight_per_unit,
+                    'total_weight': total_weight,
+                    'volume_per_unit': volume_per_unit,
+                    'total_volume': total_volume,
+                    'density': weight_per_unit / volume_per_unit if volume_per_unit > 0 else 0
+                }
+                
+                items.append(item)
+                logger.info(f"Найден товар: {quantity} шт {product_type}, {weight_per_unit}кг, {volume_per_unit:.3f}м³")
+                
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Ошибка разбора товара: {e}")
+                continue
+    
+    return items
+
+def calculate_multiple_items(items, city, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES):
+    """
+    Расчет стоимости для нескольких товаров
+    """
+    try:
+        results = []
+        total_weight = 0
+        total_volume = 0
+        total_t1_cost = 0
+        total_t2_cost = 0
+        
+        for i, item in enumerate(items, 1):
+            # Расчет для каждого товара
+            quick_cost = calculate_quick_cost(
+                item['total_weight'],
+                item['product_type'],
+                city,
+                item['total_volume'],
+                EXCHANGE_RATE,
+                DESTINATION_ZONES,
+                T1_RATES_DENSITY,
+                T2_RATES
+            )
+            
+            if quick_cost:
+                item_result = {
+                    'index': i,
+                    'product_type': item['product_type'],
+                    'quantity': item['quantity'],
+                    'total_weight': item['total_weight'],
+                    'total_volume': item['total_volume'],
+                    'density': item['density'],
+                    't1_cost': quick_cost['t1_cost'],
+                    't2_cost': quick_cost['t2_cost'],
+                    'rule': quick_cost['rule']
+                }
+                
+                results.append(item_result)
+                
+                # Суммируем общие показатели
+                total_weight += item['total_weight']
+                total_volume += item['total_volume']
+                total_t1_cost += quick_cost['t1_cost']
+                total_t2_cost += quick_cost['t2_cost']
+        
+        if not results:
+            return None
+        
+        # Общий расчет
+        total_without_commission = total_t1_cost + total_t2_cost
+        commission = total_without_commission * 0.20
+        total_cost = total_without_commission + commission
+        
+        return {
+            'items': results,
+            'totals': {
+                'total_weight': total_weight,
+                'total_volume': total_volume,
+                'total_t1_cost': total_t1_cost,
+                'total_t2_cost': total_t2_cost,
+                'commission': commission,
+                'total_cost': total_cost
+            },
+            'city': city
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка расчета нескольких товаров: {e}")
+        return None
+
+def format_multiple_items_response(calculation_result, city):
+    """
+    Форматирует детальный ответ для нескольких товаров
+    """
+    if not calculation_result:
+        return "❌ Не удалось рассчитать стоимость для вашего заказа."
+    
+    items = calculation_result['items']
+    totals = calculation_result['totals']
+    
+    response = "📦 **Детальный расчет для вашего заказа:**\n\n"
+    
+    # Детали по каждому товару
+    for item in items:
+        response += (
+            f"**{item['index']}. {item['product_type'].title()} ({item['quantity']} шт):**\n"
+            f"• Вес: {item['total_weight']} кг ({item['quantity']} × {item['total_weight']/item['quantity']:.0f} кг)\n"
+            f"• Объем: {item['total_volume']:.3f} м³\n"
+            f"• Плотность: {item['density']:.1f} кг/м³\n"
+            f"• Стоимость Т1: {item['t1_cost']:,.0f} тенге\n"
+            f"• Стоимость Т2: {item['t2_cost']:,.0f} тенге\n\n"
+        )
+    
+    # Итоговая сумма
+    response += (
+        f"💰 **ИТОГО по заказу:**\n"
+        f"• Общий вес: {totals['total_weight']} кг\n"
+        f"• Общий объем: {totals['total_volume']:.3f} м³\n"
+        f"• Стоимость Т1: {totals['total_t1_cost']:,.0f} тенге\n"
+        f"• Стоимость Т2: {totals['total_t2_cost']:,.0f} тенге\n"
+        f"• Комиссия 20%: {totals['commission']:,.0f} тенге\n\n"
+        f"💵 **ОБЩАЯ СТОИМОСТЬ ДОСТАВКИ ДО ДВЕРИ:**\n"
+        f"**{totals['total_cost']:,.0f} тенге**\n\n"
+        f"🏙️ **Город доставки:** {city.capitalize()}\n\n"
+        f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
+        f"💳 **Оплата:** пост-оплата при получении\n\n"
+        f"✅ **Оставить заявку?** Напишите ваше имя и телефон!\n"
+        f"🔄 **Новый расчет?** Напишите **Старт**"
+    )
+    
+    return response
+
+def extract_city_from_multiple_items(text, DESTINATION_ZONES):
+    """
+    Извлекает город из текста с несколькими товарами
+    """
+    text_lower = text.lower()
+    
+    # Ищем города в тексте
+    for city_name in DESTINATION_ZONES:
+        if city_name in text_lower:
+            return city_name
+    
+    return None
+
+def has_multiple_items(text):
+    """
+    Проверяет, содержит ли текст описание нескольких товаров
+    """
+    # Паттерны, указывающие на несколько товаров
+    multiple_indicators = [
+        r'\d+\s*(?:коробк\w+|шт|штук\w+).*?\d+[xх×]\d+[xх×]\d+.*?\d+\s*кг',
+        r'\d+\s*(?:паллет\w+|мешк\w+).*?\d+[xх×]\d+[xх×]\d+.*?\d+\s*кг',
+        r'.*?коробк\w+.*?коробк\w+',  # упоминание коробок во множественном числе
+        r'.*?паллет\w+.*?паллет\w+',  # упоминание паллетов во множественном числе
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in multiple_indicators:
+        if re.search(pattern, text_lower):
+            return True
+    
+    # Проверяем наличие нескольких числовых паттернов
+    item_count = len(re.findall(r'\d+\s*(?:кг|коробк|паллет|шт|штук)', text_lower))
+    return item_count >= 2
+
 def extract_delivery_info(text, DESTINATION_ZONES, PRODUCT_CATEGORIES):
-    """Извлечение данных о доставки"""
+    """Извлечение данных о доставке (обновленная версия)"""
+    # Сначала проверяем на множественные товары
+    if has_multiple_items(text):
+        items = parse_multiple_items(text)
+        city = extract_city_from_multiple_items(text, DESTINATION_ZONES)
+        
+        if items and city:
+            return {
+                'multiple_items': True,
+                'items': items,
+                'city': city,
+                'weight': sum(item['total_weight'] for item in items),
+                'product_type': "разные товары",
+                'volume': sum(item['total_volume'] for item in items)
+            }
+    
+    # Старая логика для одиночных товаров
     weight = None
     product_type = None
     city = None
@@ -417,17 +651,35 @@ def extract_delivery_info(text, DESTINATION_ZONES, PRODUCT_CATEGORIES):
                 weight = float(match.group(1))
                 break
         
-        # Используем новую функцию определения города
         text_lower = text.lower()
         for city_name in DESTINATION_ZONES:
             if city_name in text_lower:
                 city = city_name
                 break
         
-        # Используем новую функцию определения категории товара
         product_type = find_product_category(text, PRODUCT_CATEGORIES)
         
-        return weight, product_type, city
+        return {
+            'multiple_items': False,
+            'weight': weight,
+            'product_type': product_type,
+            'city': city
+        }
+        
     except Exception as e:
         logger.error(f"Ошибка извлечения данных: {e}")
-        return None, None, None
+        return {
+            'multiple_items': False,
+            'weight': None,
+            'product_type': None,
+            'city': None
+        }
+
+# Добавить в начало calculation.py после других функций
+__all__ = [
+    'calculate_t2_cost', 'calculate_large_parcel_cost', 'extract_dimensions',
+    'extract_volume', 'find_product_category', 'find_destination_zone',
+    'calculate_quick_cost', 'calculate_detailed_cost', 'extract_delivery_info',
+    'parse_multiple_items', 'calculate_multiple_items', 'format_multiple_items_response',
+    'has_multiple_items'
+]
