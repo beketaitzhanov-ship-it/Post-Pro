@@ -19,6 +19,75 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'postpro-secret-key-2024')
 app.config['PERMANENT_SESSION_LIFETIME'] = 1800
 
+# ↓↓↓ ВСТАВИТЬ ЗДЕСЬ - класс SmartIntentManager ↓↓↓
+class SmartIntentManager:
+    def __init__(self):
+        self.load_intent_config()
+    
+    def load_intent_config(self):
+        with open('intent_config.json', 'r', encoding='utf-8') as f:
+            self.config = json.load(f)
+    
+    def should_switch_to_delivery(self, message):
+        """
+        Строгая проверка - ТОЛЬКО явные признаки доставки
+        Возвращает True только если есть четкие параметры доставки
+        """
+        message_lower = message.lower()
+        
+        # 1. Проверяем числа с единицами измерения
+        has_parameters = self._has_delivery_parameters(message_lower)
+        
+        # 2. Проверяем явные ключевые слова доставки
+        has_delivery_keywords = any(
+            keyword in message_lower 
+            for keyword in self.config["delivery_triggers"]["explicit_keywords"]
+        )
+        
+        # 3. Проверяем города доставки
+        has_city = any(
+            city in message_lower 
+            for city in self.config["delivery_triggers"]["city_keywords"]
+        )
+        
+        # 4. Проверяем типы товаров
+        has_product = any(
+            product in message_lower 
+            for product in self.config["delivery_triggers"]["product_keywords"]
+        )
+        
+        # АКТИВИРУЕМ РЕЖИМ ДОСТАВКИ ТОЛЬКО ЕСЛИ:
+        # - Есть параметры (числа + единицы) ИЛИ
+        # - Явный запрос доставки И параметры/город/товар
+        if has_parameters or (has_delivery_keywords and (has_parameters or has_city or has_product)):
+            return True
+        
+        # ВСЕ остальные случаи - свободный диалог
+        return False
+    
+    def _has_delivery_parameters(self, message_lower):
+        """Проверяет наличие параметров доставки"""
+        # Вес: число + кг
+        weight_pattern = r'\d+\s*(кг|kg|килограмм)'
+        # Габариты: число×число×число или числа с единицами
+        size_pattern = r'\d+[×x*]\d+[×x*]\d+|\d+\s*(метр|м|m|см|cm|мм)'
+        
+        return bool(re.search(weight_pattern, message_lower) or 
+                   re.search(size_pattern, message_lower))
+    
+    def get_intent_type(self, message):
+        """Определяет тип интента для шаблонных ответов"""
+        message_lower = message.lower()
+        
+        for category, keywords in self.config["free_chat_priority"].items():
+            if any(keyword in message_lower for keyword in keywords):
+                return category
+        
+        return "general_chat"
+# ↑↑↑ КОНЕЦ ВСТАВКИ КЛАССА ↑↑↑
+
+# --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
+
 # --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
 def load_config():
     """Загружает конфигурацию из файла config.json."""
@@ -921,3 +990,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
