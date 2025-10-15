@@ -617,8 +617,13 @@ def has_multiple_items(text):
     item_count = len(re.findall(r'\d+\s*(?:кг|коробк|паллет|шт|штук)', text_lower))
     return item_count >= 2
 
-def extract_delivery_info(text, DESTINATION_ZONES, PRODUCT_CATEGORIES):
+def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None):
     """Извлечение данных о доставке (обновленная версия)"""
+    if DESTINATION_ZONES is None:
+        DESTINATION_ZONES = {}
+    if PRODUCT_CATEGORIES is None:
+        PRODUCT_CATEGORIES = {}
+    
     # Сначала проверяем на множественные товары
     if has_multiple_items(text):
         items = parse_multiple_items(text)
@@ -673,6 +678,7 @@ def extract_delivery_info(text, DESTINATION_ZONES, PRODUCT_CATEGORIES):
             'weight': None,
             'product_type': None,
             'city': None
+        }
         }
 
 # Добавить в начало calculation.py после других функций
