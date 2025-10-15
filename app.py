@@ -550,10 +550,10 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
         
         f"**Т2: Доставка до двери ({zone_text})**\n"
         f"{t2_explanation}\n"
-        f"• {t2_rate} тенгe/кг × {weight} кг = **{t2_cost:.0f} тенгe**\n\n"
+        f"• {t2_rate} тенге/кг × {weight} кг = **{t2_cost:.0f} тенге**\n\n"
         
         f"**Комиссия компании (20%):**\n"
-        f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = **{(t1_cost + t2_cost) * 0.20:.0f} тенгe**\n\n"
+        f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = **{(t1_cost + t2_cost) * 0.20:.0f} тенге**\n\n"
         
         f"------------------------------------\n"
         f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:,.0f} тенгe**\n\n"
@@ -1086,6 +1086,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
