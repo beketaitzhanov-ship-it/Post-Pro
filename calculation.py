@@ -687,8 +687,7 @@ def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None)
             'product_type': None,
             'city': None
         }
-        }
-
+        
 # Добавить в начало calculation.py после других функций
 __all__ = [
     'calculate_t2_cost', 'calculate_large_parcel_cost', 'extract_dimensions',
