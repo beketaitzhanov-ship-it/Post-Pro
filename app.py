@@ -762,6 +762,55 @@ def handle_message_universal(user_id, message):
         return "⚠️ Системная ошибка: функции обработки не найдены"
 # ↑↑↑ КОНЕЦ ВСТАВКИ ФУНКЦИИ ↑↑↑
 
+@app.route('/')
+def index():
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Post Pro Bot</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                max-width: 800px; 
+                margin: 0 auto; 
+                padding: 20px; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .container {
+                background: rgba(255,255,255,0.1);
+                padding: 30px;
+                border-radius: 15px;
+                backdrop-filter: blur(10px);
+            }
+            h1 { text-align: center; }
+            .status { 
+                background: #28a745; 
+                padding: 10px; 
+                border-radius: 5px; 
+                text-align: center;
+                margin: 20px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🤖 Post Pro Bot API</h1>
+            <div class="status">
+                ✅ Сервер работает корректно
+            </div>
+            <h3>Доступные эндпоинты:</h3>
+            <ul>
+                <li><strong>POST /chat</strong> - Основной чат с ботом</li>
+                <li><strong>GET /health</strong> - Проверка здоровья сервера</li>
+            </ul>
+            <p>Для тестирования используйте POST запросы на <code>/chat</code> endpoint.</p>
+        </div>
+    </body>
+    </html>
+    """
+
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -1054,3 +1103,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
