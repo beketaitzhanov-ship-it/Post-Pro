@@ -342,7 +342,7 @@ def generate_delivery_response(message):
             return "📐 Укажите габариты (например: 1.2×0.8×0.5 м) или объем"
         
         # Производим расчет
-        quick_cost = calculate_quick_cost(weight, product_type, city, volume)
+        quick_cost = calculate_quick_cost(weight, product_type, city, volume, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES)
         
         if quick_cost:
             return calculate_detailed_cost(quick_cost, weight, product_type, city, EXCHANGE_RATE)
@@ -636,10 +636,14 @@ def chat():
         if has_all_data and not calculation_shown:
             # Производим расчет
             quick_cost = calculate_quick_cost(
-                delivery_data['weight'], 
-                delivery_data['product_type'], 
-                delivery_data['city'],
-                delivery_data.get('volume')
+    delivery_data['weight'], 
+    delivery_data['product_type'], 
+    delivery_data['city'],
+    delivery_data.get('volume'),
+    EXCHANGE_RATE,
+    DESTINATION_ZONES,
+    T1_RATES_DENSITY,
+    T2_RATES
             )
             
             if quick_cost:
@@ -747,3 +751,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
