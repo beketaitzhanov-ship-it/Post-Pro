@@ -532,6 +532,13 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
 
 def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: str):
     """Детальный расчет с разбивкой по плотности"""
+    print(f"=== ОТЛАДКА calculate_detailed_cost ===")
+    print(f"quick_cost keys: {quick_cost.keys() if quick_cost else 'None'}")
+    if quick_cost:
+        print(f"length: {quick_cost.get('length')}")
+        print(f"width: {quick_cost.get('width')}") 
+        print(f"height: {quick_cost.get('height')}")
+    
     if not quick_cost:
         return "Ошибка расчета"
     
@@ -1133,6 +1140,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
