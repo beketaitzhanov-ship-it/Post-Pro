@@ -522,6 +522,9 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
             'density': density,
             'rule': rule,
             't1_cost_usd': cost_usd
+            'length': length,
+            'width': width, 
+            'height': height
         }
     except Exception as e:
         logger.error(f"Ошибка расчета: {e}")
@@ -1127,6 +1130,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
