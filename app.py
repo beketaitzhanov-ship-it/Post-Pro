@@ -426,6 +426,41 @@ def get_t1_density_rule(product_type, weight, volume):
             
     return None, density
 
+def calculate_t2_cost(weight: float, zone: str):
+    """Расчет стоимости Т2 по прогрессивным тарифам из Excel"""
+    try:
+        # Берем тарифы из конфига
+        t2_rates = T2_RATES_DETAILED["large_parcel"]
+        
+        # Находим подходящий весовой диапазон
+        base_cost = 0
+        remaining_weight = weight
+        
+        for weight_range in t2_rates["weight_ranges"]:
+            if weight <= weight_range["max"]:
+                base_cost = weight_range["zones"][zone]
+                remaining_weight = 0
+                break
+            elif weight > 20:  # Если вес больше 20 кг, используем последний диапазон + доп кг
+                if weight_range["max"] == 20:
+                    base_cost = weight_range["zones"][zone]
+                    remaining_weight = weight - 20
+                break
+        
+        # Добавляем стоимость дополнительных кг если вес больше 20 кг
+        if remaining_weight > 0:
+            extra_rate = t2_rates["extra_kg_rate"][zone]
+            base_cost += remaining_weight * extra_rate
+        
+        return base_cost
+    except Exception as e:
+        logger.error(f"Ошибка расчета Т2: {e}")
+        # Fallback: старый расчет
+        if zone == "алматы":
+            return weight * 250
+        else:
+            return weight * T2_RATES.get(zone, 300)
+
 def calculate_quick_cost(weight: float, product_type: str, city: str, volume: float = None):
     """Быстрый расчет стоимости - единый центр всех расчетов"""
     try:
@@ -452,13 +487,11 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
             
         city_lower = city.lower()
         if city_lower == "алматы" or city_lower == "алмата":
-            t2_rate = T2_RATES.get("алматы", 120)
+            t2_cost_kzt = calculate_t2_cost(weight, "алматы")
             zone_name = "алматы"
         else:
-            t2_rate = T2_RATES.get(str(zone), 250)
+            t2_cost_kzt = calculate_t2_cost(weight, str(zone))
             zone_name = f"зона {zone}"
-        
-        t2_cost_kzt = weight * t2_rate
         
         total_cost = (t1_cost_kzt + t2_cost_kzt) * 1.20
         
@@ -467,7 +500,7 @@ def calculate_quick_cost(weight: float, product_type: str, city: str, volume: fl
             't2_cost': t2_cost_kzt,
             'total': total_cost,
             'zone': zone_name,
-            't2_rate': t2_rate,
+            't2_rate': f"прогрессивный тариф (зона {zone})",
             'volume': volume,
             'density': density,
             'rule': rule,
@@ -522,7 +555,7 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
         
         f"**Т2: Доставка до двери ({zone_text})**\n"
         f"{t2_explanation}\n"
-        f"• {t2_rate} тенge/кг × {weight} кг = **{t2_cost:.0f} тенge**\n\n"
+        f"• Прогрессивный тариф для {weight} кг = **{t2_cost:.0f} тенge**\n\n"
         
         f"**Комиссия компании (20%):**\n"
         f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = **{(t1_cost + t2_cost) * 0.20:.0f} тенge**\n\n"
@@ -1058,6 +1091,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
