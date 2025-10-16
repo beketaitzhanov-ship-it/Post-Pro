@@ -849,6 +849,8 @@ def index():
 def chat():
     try:
         user_message = request.json.get('message', '').strip()
+        logger.info(f"=== НОВЫЙ ЗАПРОС: {user_message} ===")
+        
         if not user_message:
             return jsonify({"response": "Пожалуйста, введите сообщение."})
         
@@ -1145,8 +1147,11 @@ def chat():
         
         Вопрос клиента: {user_message}
         """
+        logger.info(f"=== ВЫЗОВ GEMINI ===")
+        logger.info(f"Промпт: {gemini_prompt[:500]}...")  # первые 500 символов
         
         bot_response = get_gemini_response(gemini_prompt)
+        logger.info(f"=== ОТВЕТ GEMINI: {bot_response} ===")
         chat_history.append(f"Ассистент: {bot_response}")
         
         # Ограничение истории
@@ -1169,6 +1174,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
