@@ -478,7 +478,7 @@ def calculate_t2_cost(weight: float, zone: str):
         else:
             return weight * T2_RATES.get(zone, 300)
 
-def calculate_quick_cost(weight: float, product_type: str, city: str, volume: float = None):
+def calculate_quick_cost(weight: float, product_type: str, city: str, volume: float = None, length: float = None, width: float = None, height: float = None):
     """Быстрый расчет стоимости - единый центр всех расчетов"""
     try:
         rule, density = get_t1_density_rule(product_type, weight, volume)
@@ -1127,6 +1127,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
