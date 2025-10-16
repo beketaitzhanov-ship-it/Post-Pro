@@ -14,28 +14,22 @@
         
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: 
-                linear-gradient(rgba(11, 20, 26, 0.9), rgba(11, 20, 26, 0.9)),
-                url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800"><rect fill="%23111b21" width="1200" height="800"/><path fill="%23202c33" d="M200,400 Q400,350 600,400 T1000,400 L1000,800 L200,800 Z"/><g fill="%23005c4b" opacity="0.1"><rect x="100" y="300" width="80" height="40" rx="5"/><rect x="300" y="350" width="80" height="40" rx="5"/><rect x="500" y="320" width="80" height="40" rx="5"/><rect x="700" y="380" width="80" height="40" rx="5"/><rect x="900" y="340" width="80" height="40" rx="5"/></g></svg>');
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
+            background: #0b141a;
             color: #e9edef;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 0;
-            font-size: 16px; /* Базовый размер как в WhatsApp */
+            font-size: 16px;
         }
         
         .chat-container {
             width: 100%;
             max-width: 900px;
             background: #111b21;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-radius: 0;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -64,7 +58,7 @@
         }
         
         .header-text h1 {
-            font-size: 1rem; /* Как заголовок в WhatsApp */
+            font-size: 1rem;
             font-weight: 600;
             color: #e9edef;
             line-height: 1.2;
@@ -82,11 +76,11 @@
         
         .message {
             max-width: 85%;
-            padding: 8px 12px; /* Отступы как в WhatsApp */
+            padding: 8px 12px;
             border-radius: 8px;
             line-height: 1.4;
             animation: fadeIn 0.3s ease;
-            font-size: 14.2px; /* Точный размер текста WhatsApp */
+            font-size: 14.2px;
             word-wrap: break-word;
             position: relative;
         }
@@ -114,7 +108,7 @@
         }
         
         .input-area {
-            padding: 12px 16px; /* Отступы поля ввода как в WhatsApp */
+            padding: 12px 16px;
             border-top: 1px solid #2a3942;
             background: #202c33;
             flex-shrink: 0;
@@ -128,14 +122,14 @@
         
         #message-input {
             flex-grow: 1;
-            padding: 9px 12px; /* Точные отступы поля ввода WhatsApp */
+            padding: 9px 12px;
             border: none;
             border-radius: 20px;
-            font-size: 15px; /* Размер текста ввода как в WhatsApp */
+            font-size: 15px;
             font-family: 'Segoe UI', sans-serif;
             outline: none;
             resize: none;
-            min-height: 42px; /* Высота поля ввода WhatsApp */
+            min-height: 42px;
             max-height: 120px;
             line-height: 1.4;
             background: #2a3942;
@@ -145,32 +139,33 @@
         
         #message-input::placeholder {
             color: #8696a0;
-            font-size: 15px; /* Размер плейсхолдера как в WhatsApp */
+            font-size: 15px;
         }
         
         #message-input:focus {
             background: #2a3942;
-            box-shadow: 0 0 0 2px rgba(0, 168, 132, 0.3);
         }
         
         #send-button {
-            padding: 10px 16px; /* Отступы кнопки как в WhatsApp */
+            padding: 10px 16px;
             background: #005c4b;
             color: #e9edef;
             border: none;
-            border-radius: 20px;
-            font-size: 14px; /* Размер текста кнопки */
+            border-radius: 50%;
+            font-size: 16px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
             font-family: 'Segoe UI', sans-serif;
-            min-width: 60px;
-            min-height: 42px; /* Высота кнопки соответствует полю ввода */
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         #send-button:hover:not(:disabled) {
             background: #004d3d;
-            transform: translateY(-1px);
         }
         
         #send-button:disabled {
@@ -205,7 +200,7 @@
         
         .message-content {
             white-space: pre-wrap;
-            line-height: 1.4; /* Межстрочный интервал WhatsApp */
+            line-height: 1.4;
         }
         
         /* Стили для скроллбара */
@@ -227,7 +222,6 @@
             background: #005c4b;
         }
 
-        /* Гарантия что панель ввода всегда видна */
         .input-area {
             position: sticky;
             bottom: 0;
@@ -236,34 +230,11 @@
             z-index: 100;
         }
 
-        /* Логистические элементы в фоне */
-        .logistic-elements {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: -1;
-            opacity: 0.1;
-        }
-
-        .logistic-elements::before {
-            content: "🚛 🚚 📦 🗺️ ⚡";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 3rem;
-            white-space: nowrap;
-        }
-
-        /* Мобильная адаптация с сохранением размеров WhatsApp */
+        /* Мобильная адаптация */
         @media (max-width: 768px) {
             body {
                 padding: 0;
                 align-items: stretch;
-                font-size: 15px; /* Немного меньше на мобильных */
             }
             
             .chat-container {
@@ -275,22 +246,15 @@
             
             .header {
                 padding: 14px 16px;
-                border-radius: 0;
-            }
-            
-            .header-text h1 {
-                font-size: 0.95rem; /* Сохраняем пропорции */
             }
             
             .chat-messages {
                 padding: 12px;
-                gap: 6px;
             }
             
             .message {
                 max-width: 90%;
-                padding: 7px 11px; /* Сохраняем пропорции отступов */
-                font-size: 14px; /* Чуть меньше на мобильных */
+                font-size: 14px;
             }
             
             .input-area {
@@ -298,73 +262,19 @@
             }
             
             #message-input {
-                padding: 8px 12px;
                 min-height: 40px;
-                font-size: 15px; /* Сохраняем размер текста */
-            }
-            
-            #message-input::placeholder {
                 font-size: 15px;
             }
             
             #send-button {
-                padding: 8px 14px;
-                font-size: 14px;
-                min-width: 55px;
-                min-height: 40px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            body {
-                font-size: 14px;
-            }
-            
-            .header {
-                padding: 12px 14px;
-            }
-            
-            .header-text h1 {
-                font-size: 0.9rem;
-            }
-            
-            .chat-messages {
-                padding: 10px;
-                gap: 4px;
-            }
-            
-            .message {
-                max-width: 95%;
-                padding: 6px 10px;
-                font-size: 13.5px;
-            }
-            
-            .input-area {
-                padding: 8px 12px;
-            }
-            
-            #message-input {
-                padding: 7px 11px;
-                min-height: 38px;
-                font-size: 14.5px;
-            }
-            
-            #message-input::placeholder {
-                font-size: 14.5px;
-            }
-            
-            #send-button {
-                padding: 7px 12px;
-                font-size: 13px;
-                min-width: 50px;
-                min-height: 38px;
+                width: 40px;
+                height: 40px;
+                font-size: 15px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="logistic-elements"></div>
-    
     <div class="chat-container">
         <div class="header">
             <div class="header-text">
@@ -375,15 +285,17 @@
         <div class="chat-messages" id="chat-messages">
             <div class="message bot-message">
                 <div class="message-content">
-                    Привет! 👋 Я ваш ИИ-помощник Post Pro. 
+Салют! 👋 Я ваш ИИ-ассистент POST PRO
 
-🚚 **Рассчитаю доставку из Китая в Казахстан:**
-
-• Доставка до Алматы (склады: ИУ/Гуанчжоу)
+Рассчитаю доставку из Китая в Казахстан:
+• Доставка до Алматы  
 • Доставка до двери по Казахстану
 
-💡 **Просто напишите:**
+Cклады: в Гуанчжоу и в ИУ
+
+💡 Просто напишите:
 - Вес груза
+- Объём
 - Тип товара  
 - Город доставки
 
@@ -401,7 +313,7 @@
                     aria-label="Введите сообщение"
                 ></textarea>
                 <button id="send-button" aria-label="Отправить сообщение">
-                    Отпр
+                    ➤
                 </button>
             </div>
         </div>
@@ -412,7 +324,6 @@
         const sendButton = document.getElementById('send-button');
         const chatMessages = document.getElementById('chat-messages');
 
-        // Автоматическое увеличение высоты textarea
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
@@ -495,7 +406,6 @@
             }
         }
 
-        // Обработчики событий
         sendButton.addEventListener('click', sendMessage);
         
         messageInput.addEventListener('keydown', function(e) {
@@ -505,7 +415,6 @@
             }
         });
 
-        // Фокус на поле ввода при загрузке
         messageInput.focus();
     </script>
 </body>
