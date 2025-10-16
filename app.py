@@ -645,9 +645,9 @@ def chat():
                 DESTINATION_ZONES,
                 T1_RATES_DENSITY,  # ✅ ПРАВИЛЬНО: T1_RATES_DENSITY
                 T2_RATES           # ✅ ПРАВИЛЬНО: T2_RATES
-            )
+             )
             
-            if quick_cost:
+             if quick_cost:
                 # Сразу показываем детальный расчет вместо вопроса
                 detailed_response = calculate_detailed_cost(
                     quick_cost,
@@ -752,4 +752,5 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
