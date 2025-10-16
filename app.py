@@ -122,6 +122,13 @@ else:
     logger.error("!!! Приложение запускается с значениями по умолчанию из-за ошибки загрузки config.json")
     EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS, PRODUCT_CATEGORIES = 550, {}, {}, {}, {}, {}, [], {}
 
+# Максимальные размеры для доставки до двери (в метрах)
+MAX_DIMENSIONS = {
+    'length': 2.3,   # 230 см
+    'width': 1.8,    # 180 см 
+    'height': 1.1    # 110 см
+}
+
 # --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С КОНФИГОМ ---
 
 def find_product_category(text, product_categories):
@@ -400,6 +407,15 @@ def extract_volume(text):
                 continue
     
     return None
+
+def check_dimensions_exceeded(length, width, height):
+    """Проверяет, превышает ли груз максимальные размеры для доставки до двери"""
+    if not length or not width or not height:
+        return False
+    
+    return (length > MAX_DIMENSIONS['length'] or 
+            width > MAX_DIMENSIONS['width'] or 
+            height > MAX_DIMENSIONS['height'])
 
 def get_t1_density_rule(product_type, weight, volume):
     """Находит и возвращает правило тарифа Т1 на основе плотности груза."""
@@ -1092,6 +1108,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
