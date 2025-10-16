@@ -269,7 +269,105 @@ def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
             
     return None, density
 
-calculate_quick_cost    
+def find_destination_zone(city, DESTINATION_ZONES):
+    """
+    Находит зону доставки по городу
+    """
+    if not city:
+        return None
+    
+    city_lower = city.lower()
+    
+    # Прямой поиск города
+    if city_lower in DESTINATION_ZONES:
+        zone = DESTINATION_ZONES[city_lower]
+        return str(zone)  # Всегда возвращаем строку
+    
+    return None
+
+def calculate_quick_cost(weight, product_type, city, volume, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES):
+    """
+    Быстрый расчет стоимости доставки
+    """
+    try:
+        # Находим зону доставки
+        zone = find_destination_zone(city, DESTINATION_ZONES)
+        if not zone:
+            logger.error(f"Зона для города {city} не найдена")
+            return None
+        
+        # Получаем правило тарифа Т1 на основе плотности
+        rule, density = get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY)
+        if not rule:
+            logger.error(f"Правило тарифа для {product_type} не найдено")
+            return None
+        
+        # Расчет стоимости Т1
+        if rule['unit'] == 'kg':
+            t1_cost = weight * rule['price'] * EXCHANGE_RATE
+        else:  # unit == 'm3'
+            t1_cost = volume * rule['price'] * EXCHANGE_RATE
+        
+        # Расчет стоимости Т2
+        t2_cost = calculate_t2_cost(weight, zone)
+        if t2_cost is None:
+            logger.error("Ошибка расчета Т2")
+            return None
+        
+        return {
+            't1_cost': t1_cost,
+            't2_cost': t2_cost,
+            'rule': rule,
+            'density': density,
+            'zone': zone
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка расчета: {e}")
+        return None
+
+def calculate_detailed_cost(quick_cost, weight, product_type, city, EXCHANGE_RATE):
+    """
+    Форматирует детальный ответ с расчетом стоимости
+    """
+    if not quick_cost:
+        return "❌ Не удалось рассчитать стоимость."
+    
+    total_without_commission = quick_cost['t1_cost'] + quick_cost['t2_cost']
+    commission = total_without_commission * 0.20
+    total_cost = total_without_commission + commission
+    
+    response = (
+        f"📦 **Расчет доставки для {product_type}:**\n\n"
+        f"• Вес: {weight} кг\n"
+        f"• Город: {city.capitalize()}\n"
+        f"• Плотность: {quick_cost['density']:.1f} кг/м³\n\n"
+        f"💰 **Стоимость доставки:**\n"
+        f"• Т1 (Китай-Алматы): {quick_cost['t1_cost']:,.0f} тенге\n"
+        f"• Т2 (до двери): {quick_cost['t2_cost']:,.0f} тенге\n"
+        f"• Комиссия 20%: {commission:,.0f} тенге\n\n"
+        f"💵 **ИТОГО: {total_cost:,.0f} тенге**\n\n"
+        f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
+        f"💳 **Оплата:** пост-оплата при получении\n\n"
+        f"✅ **Оставить заявку?** Напишите ваше имя и телефон!\n"
+        f"📊 **Детальный расчет?** Напишите **Детально**"
+    )
+    
+    return response
+
+def parse_multiple_items(text):
+    """
+    Парсит текст с несколькими товарами
+    """
+    items = []
+    
+    patterns = [
+        r'(\d+)\s*(?:коробк\w+|шт|штук\w+)\s*(.*?)\s*(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:по|весом)?\s*(\d+(?:[.,]\d+)?)\s*(?:кг|kg)',
+        r'(\d+)\s*(?:паллет\w+|мешк\w+)\s*(.*?)\s*(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:по|весом)?\s*(\d+(?:[.,]\d+)?)\s*(?:кг|kg)',
+    ]
+    
+    text_lower = text.lower()
+    
     for pattern in patterns:
         matches = re.finditer(pattern, text_lower)
         for match in matches:
@@ -512,7 +610,7 @@ def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None)
         product_type = find_product_category(text, PRODUCT_CATEGORIES)
         
         return {
-            'multiple_items': False
+            'multiple_items': False,
             'weight': weight,
             'product_type': product_type,
             'city': city
@@ -525,7 +623,6 @@ def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None)
             'weight': None,
             'product_type': None,
             'city': None
-        }
         }
 
 # Добавить в начало calculation.py после других функций
