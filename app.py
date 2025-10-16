@@ -903,7 +903,7 @@ def chat():
                     'calculation_shown': False
                 })
                 
-                return jsonify({"response": "🎉 Спасибо, что выбрали Post Pro! Менеджер свяжется с вами в течение 15 минут. 📞"})
+                return jsonify({"response": "🎉 Спасибо, что выбрали Post Pro! Менеджер свяжется с вами в течение часа. 📞⏰ **Рабочее время:** с 9:00 до 19:00 по времени Астаны"})
             else:
                 return jsonify({"response": "Не удалось распознать контакты. Пожалуйста, укажите в формате: 'Имя, 87001234567'"})
         
@@ -1097,32 +1097,61 @@ def chat():
                 session['chat_history'] = chat_history
                 return jsonify({"response": "Отлично! Для связи укажите:\n• Ваше имя\n• Номер телефона\n\nНапример: 'Аслан, 87001234567'"})
         
-        # Обработка общих вопросов через Gemini (fallback)
+        # ВО ВСЕХ ОСТАЛЬНЫХ СЛУЧАЯХ - используем Gemini для естественного общения
         context_lines = []
+        
+        # Добавляем историю диалога
         if len(chat_history) > 0:
             context_lines.append("История диалога:")
-            for msg in chat_history[-3:]:
+            for msg in chat_history[-6:]:  # Берем последние 6 сообщений
                 context_lines.append(msg)
         
-        context_lines.append("\nКонтекст диалога (история + данные):")
+        # Добавляем текущие данные о доставке
+        context_lines.append("\nТекущие данные для доставки:")
         if delivery_data['weight']:
             context_lines.append(f"- Вес: {delivery_data['weight']} кг")
+        else:
+            context_lines.append(f"- Вес: не указан")
         if delivery_data['product_type']:
             context_lines.append(f"- Товар: {delivery_data['product_type']}")
+        else:
+            context_lines.append(f"- Товар: не указан")
         if delivery_data['city']:
             context_lines.append(f"- Город: {delivery_data['city']}")
+        else:
+            context_lines.append(f"- Город: не указан")
         if delivery_data.get('volume'):
             context_lines.append(f"- Объем: {delivery_data['volume']:.3f} м³")
-        if calculation_shown:
-            context_lines.append(f"- Расчет показан: Да")
+        else:
+            context_lines.append(f"- Объем: не указан")
         
         context = "\n".join(context_lines)
-        bot_response = get_gemini_response(user_message, context)
+        
+        # Создаем промпт для Gemini
+        gemini_prompt = f"""
+        {PERSONALITY_PROMPT}
+        
+        Ты - умный и дружелюбный ассистент компании Post Pro. Твоя главная цель - помочь клиенту рассчитать стоимость доставки из Китая в Казахстан.
+        
+        Контекст диалога:
+        {context}
+        
+        Важные правила:
+        1. Общайся естественно, с юмором и эмодзи
+        2. Если данных для расчета не хватает - вежливо напомни какие параметры нужны
+        3. Не заставляй клиента строго следовать формату - принимай данные в любом виде
+        4. Поддержи любой разговор, но мягко возвращай к теме доставки
+        5. Используй информацию из истории диалога
+        
+        Вопрос клиента: {user_message}
+        """
+        
+        bot_response = get_gemini_response(gemini_prompt)
         chat_history.append(f"Ассистент: {bot_response}")
         
         # Ограничение истории
-        if len(chat_history) > 8:
-            chat_history = chat_history[-8:]
+        if len(chat_history) > 10:
+            chat_history = chat_history[-10:]
         
         session['chat_history'] = chat_history
         session['delivery_data'] = delivery_data
@@ -1140,6 +1169,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
