@@ -243,7 +243,7 @@ def find_destination_zone(city_name, destination_zones):
     return None
 
 def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
-    """Находит и возвращает правило тарифа Т1 на основе плотности груза."""
+    """Находит и возвращает правило тарифа Т1 на осFнове плотности груза."""
     if not volume or volume <= 0:
         return None, None
 
@@ -251,17 +251,24 @@ def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
     
     # Используем новую функцию определения категории
     category = find_product_category(product_type, T1_RATES_DENSITY)
+    
+    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если категория не найдена, используем "общие"
     if not category:
-        category = "мебель"  # категория по умолчанию
+        category = "общие"
+        logger.warning(f"Категория для '{product_type}' не найдена, используется 'общие'")
     
     rules = T1_RATES_DENSITY.get(category.lower())
+    
+    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если правил для категории нет, используем "общие"
     if not rules:
-        rules = T1_RATES_DENSITY.get("мебель")
+        rules = T1_RATES_DENSITY.get("общие")
+        logger.warning(f"Правила для категории '{category}' не найдены, используются 'общие'")
     
     # Проверка на наличие правил
     if not rules:
         return None, density
 
+# 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ДОБАВЛЕН ВОЗВРАТ ЗНАЧЕНИЯ!
     for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
         if density >= rule['min_density']:
             return rule, density
@@ -687,7 +694,8 @@ def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None)
             'product_type': None,
             'city': None
         }
-        
+        }
+
 # Добавить в начало calculation.py после других функций
 __all__ = [
     'calculate_t2_cost', 'calculate_large_parcel_cost', 'extract_dimensions',
