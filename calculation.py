@@ -225,6 +225,23 @@ def find_product_category(text, product_categories):
     
     return None
 
+def find_destination_zone(city_name, destination_zones):
+    """
+    Находит зону назначения по названию города
+    """
+    city_lower = city_name.lower().strip()
+    
+    # Прямой поиск
+    if city_lower in destination_zones:
+        return destination_zones[city_lower]
+    
+    # Поиск с учетом возможных опечаток
+    for city, zone in destination_zones.items():
+        if city in city_lower or city_lower in city:
+            return zone
+    
+    return None
+
 def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
     """Находит и возвращает правило тарифа Т1 на основе плотности груза."""
     if not volume or volume <= 0:
@@ -234,42 +251,178 @@ def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
     
     # Используем новую функцию определения категории
     category = find_product_category(product_type, T1_RATES_DENSITY)
-    
-    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если категория не найдена, используем "общие"
     if not category:
-        category = "общие"
-        logger.warning(f"Категория для '{product_type}' не найдена, используется 'общие'")
+        category = "мебель"  # категория по умолчанию
     
-    # 🔥 ИСПРАВЛЕНИЕ: Убедимся что category - это строка и приведем к нижнему регистру
-    category_key = str(category).lower() if category else "общие"
-    
-    rules = T1_RATES_DENSITY.get(category_key)
-    
-    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если правил для категории нет, используем "общие"
+    rules = T1_RATES_DENSITY.get(category.lower())
     if not rules:
-        rules = T1_RATES_DENSITY.get("общие")
-        logger.warning(f"Правила для категории '{category_key}' не найдены, используются 'общие'")
+        rules = T1_RATES_DENSITY.get("мебель")
     
-    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что rules - это список
-    if not rules or not isinstance(rules, list):
-        logger.error(f"Правила для категории '{category_key}' не найдены или неверного типа: {type(rules)}")
+    # Проверка на наличие правил
+    if not rules:
         return None, density
 
-    try:
-        # 🔥 ИСПРАВЛЕНИЕ: Проверяем что правила можно отсортировать
-        if not rules:
-            return None, density
-            
-        for rule in sorted(rules, key=lambda x: x.get('min_density', 0), reverse=True):
-            if density >= rule.get('min_density', 0):
-                return rule, density
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"Ошибка сортировки правил: {e}, rules: {rules}")
-        return None, density
+    for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
+        if density >= rule['min_density']:
+            return rule, density
             
     return None, density
 
-calculate_quick_cost    
+def calculate_quick_cost(weight, product_type, city, volume, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES):
+    """Быстрый расчет стоимости - единый центр всех расчетов"""
+    try:
+        rule, density = get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY)
+        if not rule:
+            return None
+        
+        price = rule['price']
+        unit = rule['unit']
+        
+        if unit == "kg":
+            cost_usd = price * weight
+        elif unit == "m3":
+            cost_usd = price * volume
+        else:
+            cost_usd = price * weight 
+        
+        t1_cost_kzt = cost_usd * EXCHANGE_RATE
+        
+        # Используем новую функцию определения зоны
+        zone = find_destination_zone(city, DESTINATION_ZONES)
+        if not zone:
+            return None
+            
+        city_lower = city.lower()
+        
+        # ОБНОВЛЕННАЯ ЛОГИКА РАСЧЕТА Т2
+        # Ищем тариф для конкретного города или зоны
+        t2_rate = None
+        
+        # Сначала проверяем конкретный город
+        if city_lower in T2_RATES:
+            t2_rate = T2_RATES[city_lower]
+            zone_name = city.capitalize()
+        # Затем проверяем зону
+        elif str(zone) in T2_RATES:
+            t2_rate = T2_RATES[str(zone)]
+            zone_name = f"зона {zone}"
+        else:
+            # Тариф по умолчанию
+            t2_rate = T2_RATES.get("default", 250)
+            zone_name = f"зона {zone}"
+        
+        # Расчет стоимости Т2
+        t2_cost_kzt = weight * t2_rate
+        
+        # Итоговая стоимость с комиссией 20%
+        total_cost = (t1_cost_kzt + t2_cost_kzt) * 1.20
+        
+        return {
+            't1_cost': t1_cost_kzt,
+            't2_cost': t2_cost_kzt,
+            'total': total_cost,
+            'zone': zone_name,
+            't2_rate': t2_rate,
+            'volume': volume,
+            'density': density,
+            'rule': rule,
+            't1_cost_usd': cost_usd
+        }
+    except Exception as e:
+        logger.error(f"Ошибка расчета: {e}")
+        return None
+
+def calculate_detailed_cost(quick_cost, weight, product_type, city, EXCHANGE_RATE):
+    """Детальный расчет с разбивкой по плотности"""
+    if not quick_cost:
+        return "Ошибка расчета"
+    
+    t1_cost = quick_cost['t1_cost']
+    t2_cost = quick_cost['t2_cost'] 
+    total = quick_cost['total']
+    zone = quick_cost['zone']
+    t2_rate = quick_cost['t2_rate']
+    volume = quick_cost['volume']
+    density = quick_cost['density']
+    rule = quick_cost['rule']
+    t1_cost_usd = quick_cost['t1_cost_usd']
+    
+    price = rule['price']
+    unit = rule['unit']
+    if unit == "kg":
+        calculation_text = f"${price}/кг × {weight} кг = ${t1_cost_usd:.2f} USD"
+    elif unit == "m3":
+        calculation_text = f"${price}/м³ × {volume:.3f} м³ = ${t1_cost_usd:.2f} USD"
+    else:
+        calculation_text = f"${price}/кг × {weight} кг = ${t1_cost_usd:.2f} USD"
+    
+    city_name = city.capitalize()
+    
+    # ОБНОВЛЕННАЯ ЛОГИКА ОПИСАНИЯ Т2
+    if "алматы" in zone.lower() or "алмата" in zone.lower():
+        t2_explanation = f"• Доставка по городу Алматы до вашего адреса"
+        zone_text = "город Алматы"
+        comparison_text = f"💡 **Если самовывоз со склада в Алматы:** {t1_cost:.0f} тенге"
+    elif "астана" in zone.lower():
+        t2_explanation = f"• Доставка до вашего адреса в Астане"
+        zone_text = "город Астана"
+        comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost:.0f} тенге"
+    else:
+        t2_explanation = f"• Доставка до вашего адреса в {city_name}"
+        zone_text = f"{zone}"
+        comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost:.0f} тенге"
+    
+    response = (
+        f"📊 **Детальный расчет для {weight} кг «{product_type}» в г. {city_name}:**\n\n"
+        
+        f"**Т1: Доставка из Китая до Алматы**\n"
+        f"• Плотность вашего груза: **{density:.1f} кг/м³**\n"
+        f"• Применен тариф Т1: **${price} за {unit}**\n"
+        f"• Расчет: {calculation_text}\n"
+        f"• По курсу {EXCHANGE_RATE} тенге/$ = **{t1_cost:.0f} тенге**\n\n"
+        
+        f"**Т2: Доставка до двери ({zone_text})**\n"
+        f"{t2_explanation}\n"
+        f"• {t2_rate} тенге/кг × {weight} кг = **{t2_cost:.0f} тенге**\n\n"
+        
+        f"**Комиссия компании (20%):**\n"
+        f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = **{(t1_cost + t2_cost) * 0.20:.0f} тенге**\n\n"
+        
+        f"------------------------------------\n"
+        f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:,.0f} тенгe**\n\n"
+        
+        f"{comparison_text}\n\n"
+        f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
+        f"💳 **Оплата:** пост-оплата при получении\n\n"
+        f"✅ **Оставить заявку?** Напишите ваше имя и телефон!\n"
+        f"🔄 **Новый расчет?** Напишите **Старт**"
+    )
+    return response
+
+def parse_multiple_items(text):
+    """
+    Разбирает текст с несколькими товарами
+    Возвращает список словарей с данными по каждому товару
+    """
+    items = []
+    
+    # Паттерны для поиска различных форматов
+    patterns = [
+        # Формат: "5 коробок вещей размеры 45х40х40 по 40 кг"
+        r'(\d+)\s*(?:коробк\w+|шт|штук\w+)\s+([^0-9]+?)\s*(?:размер\w*|габарит\w*)?\s*(\d+)[xх×](\d+)[xх×](\d+).*?(?:по|вес)\s*(\d+(?:[.,]\d+)?)\s*кг',
+        
+        # Формат: "3 коробки посуды 60х90х90 70 кг"
+        r'(\d+)\s*(?:коробк\w+|шт|штук\w+|паллет\w+|мешк\w+|ящик\w+)\s+([^0-9]+?)\s*(?:размер\w*|габарит\w*)?\s*(\d+)[xх×](\d+)[xх×](\d+).*?(\d+(?:[.,]\d+)?)\s*кг',
+        
+        # Формат: "1 паллет техники 100х120х110 400 кг"
+        r'(\d+)\s*(?:паллет\w+|коробк\w+|мешк\w+|ящик\w+)\s+([^0-9]+?)\s*(\d+)[xх×](\d+)[xх×](\d+).*?(\d+(?:[.,]\d+)?)\s*кг',
+        
+        # Формат с указанием "по X кг" в конце
+        r'(\d+)\s*(?:коробк\w+|шт|штук\w+)\s+([^0-9]+?)\s*(?:размер\w*)?\s*(\d+)[xх×](\d+)[xх×](\d+).*?по\s*(\d+(?:[.,]\d+)?)\s*кг',
+    ]
+    
+    text_lower = text.lower()
+    
     for pattern in patterns:
         matches = re.finditer(pattern, text_lower)
         for match in matches:
@@ -464,13 +617,8 @@ def has_multiple_items(text):
     item_count = len(re.findall(r'\d+\s*(?:кг|коробк|паллет|шт|штук)', text_lower))
     return item_count >= 2
 
-def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None):
+def extract_delivery_info(text, DESTINATION_ZONES, PRODUCT_CATEGORIES):
     """Извлечение данных о доставке (обновленная версия)"""
-    if DESTINATION_ZONES is None:
-        DESTINATION_ZONES = {}
-    if PRODUCT_CATEGORIES is None:
-        PRODUCT_CATEGORIES = {}
-    
     # Сначала проверяем на множественные товары
     if has_multiple_items(text):
         items = parse_multiple_items(text)
@@ -512,7 +660,7 @@ def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None)
         product_type = find_product_category(text, PRODUCT_CATEGORIES)
         
         return {
-            'multiple_items': False
+            'multiple_items': False,
             'weight': weight,
             'product_type': product_type,
             'city': city
@@ -525,7 +673,6 @@ def extract_delivery_info(text, DESTINATION_ZONES=None, PRODUCT_CATEGORIES=None)
             'weight': None,
             'product_type': None,
             'city': None
-        }
         }
 
 # Добавить в начало calculation.py после других функций
