@@ -534,7 +534,6 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
     
     t1_cost = quick_cost['t1_cost']
     t2_cost = quick_cost['t2_cost'] 
-    total = quick_cost['total']
     zone = quick_cost['zone']
     t2_rate = quick_cost['t2_rate']
     volume = quick_cost['volume']
@@ -574,7 +573,13 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
             t2_explanation = f"• Доставка до вашего адреса в {city_name}"
             zone_text = f"Зона {zone}"
             comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost * 1.20:.0f} тенге (включая комиссию 20%)"
-    
+
+        # Пересчитываем итоговую стоимость
+    if check_dimensions_exceeded(length, width, height):
+        total_cost = t1_cost * 1.20  # Только Т1 с комиссией
+    else:
+        total_cost = (t1_cost + t2_cost) * 1.20
+        
     response = (
         f"📊 **Детальный расчет для {weight} кг «{product_type}» в г. {city_name}:**\n\n"
         
@@ -592,7 +597,7 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
         f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = **{(t1_cost + t2_cost) * 0.20:.0f} тенge**\n\n"
         
         f"------------------------------------\n"
-        f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:,.0f} тенge**\n\n"
+        f"💰 **ИТОГО с доставкой до двери:** ≈ **{total_cost:,.0f} тенge**\n\n"
         
         f"{comparison_text}\n\n"
         f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
@@ -1122,6 +1127,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
