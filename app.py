@@ -631,30 +631,33 @@ def chat():
                 session['delivery_data'] = delivery_data
                 session['chat_history'] = chat_history
                 return jsonify({"response": response_message})
+
+                # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
+if has_all_data and not calculation_shown:
+    # 🔥 ИСПРАВЛЕННЫЙ ВЫЗОВ - для одиночных товаров
+    quick_cost = calculate_quick_cost( 
+        # Производим расчет
+        delivery_data['weight'],
+        delivery_data['product_type'],
+        delivery_data['city'],
+        delivery_data.get('volume'),
+        EXCHANGE_RATE,
+        DESTINATION_ZONES,
+        T1_RATES_DENSITY,  # ✅ ПРАВИЛЬНО: T1_RATES_DENSITY
+        T2_RATES           # ✅ ПРАВИЛЬНО: T2_RATES
+    )
+    
+    if quick_cost:
+        # Сразу показываем детальный расчет вместо вопроса
+        detailed_response = calculate_detailed_cost(
+            quick_cost,
+            delivery_data['weight'], 
+            delivery_data['product_type'], 
+            delivery_data['city'],
+            EXCHANGE_RATE
+        )
         
-        # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
-        if has_all_data and not calculation_shown:
-            # Производим расчет
-            # 🔥 ИСПРАВЛЕННЫЙ ВЫЗОВ - для одиночных товаров
-            quick_cost = calculate_quick_cost(
-                delivery_data['weight'], 
-                delivery_data['product_type'], 
-                delivery_data['city'],
-                delivery_data.get('volume'),
-                EXCHANGE_RATE,
-                DESTINATION_ZONES,
-                T1_RATES_DENSITY,  # ✅ ПРАВИЛЬНО: T1_RATES_DENSITY
-                T2_RATES           # ✅ ПРАВИЛЬНО: T2_RATES
-             )
-            
-             if quick_cost:
-                # Сразу показываем детальный расчет вместо вопроса
-                detailed_response = calculate_detailed_cost(
-                    quick_cost,
-                    delivery_data['weight'], 
-                    delivery_data['product_type'], 
-                    delivery_data['city'],
-                    EXCHANGE_RATE
+        # Сохраняем результат расчета в сессии
                 )
                 
                 # Сохраняем результат расчета в сессии
@@ -752,5 +755,6 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
