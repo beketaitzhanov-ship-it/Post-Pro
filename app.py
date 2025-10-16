@@ -7,13 +7,6 @@ import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
 from dotenv import load_dotenv
 import logging
-from calculation import (
-    calculate_t2_cost, calculate_large_parcel_cost, extract_dimensions, 
-    extract_volume, find_product_category, find_destination_zone, 
-    calculate_quick_cost, calculate_detailed_cost, extract_delivery_info,
-    parse_multiple_items, calculate_multiple_items, format_multiple_items_response,
-    has_multiple_items
-)
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -36,39 +29,37 @@ class SmartIntentManager:
             self.config = json.load(f)
     
     def should_switch_to_delivery(self, message):
+        """
+        Строгая проверка - ТОЛЬКО явные признаки доставки
+        Возвращает True только если есть четкие параметры доставки
+        """
         message_lower = message.lower()
         
-        # 1. Проверяем числа с единицами измерения (строгая проверка)
+        # 1. Проверяем числа с единицами измерения
         has_parameters = self._has_delivery_parameters(message_lower)
         
-        # 2. Проверяем ключевые слова параметров (дополнительная проверка)
-        has_parameter_keywords = any(
-            keyword in message_lower 
-            for keyword in self.config["delivery_triggers"]["parameter_keywords"]
-        )
-        
-        # 3. Проверяем явные ключевые слова доставки
+        # 2. Проверяем явные ключевые слова доставки
         has_delivery_keywords = any(
             keyword in message_lower 
             for keyword in self.config["delivery_triggers"]["explicit_keywords"]
         )
         
-        # 4. Проверяем города доставки
+        # 3. Проверяем города доставки
         has_city = any(
             city in message_lower 
             for city in self.config["delivery_triggers"]["city_keywords"]
         )
         
-        # 5. Проверяем типы товаров
+        # 4. Проверяем типы товаров
         has_product = any(
             product in message_lower 
             for product in self.config["delivery_triggers"]["product_keywords"]
         )
         
         # АКТИВИРУЕМ РЕЖИМ ДОСТАВКИ ТОЛЬКО ЕСЛИ:
-        # - Есть параметры (числа + единицы) ИЛИ есть слова параметров ИЛИ
-        # - Явный запрос доставки И (есть город ИЛИ есть товар ИЛИ есть слова параметров)
-        if has_parameters or has_parameter_keywords or (has_delivery_keywords and (has_city or has_product or has_parameter_keywords)):
+        # - Есть параметры (числа + единицы) ИЛИ
+        # - Явный запрос доставки И параметры/город/товар
+        if has_parameters or (has_delivery_keywords and (has_parameters or has_city or has_product)):
             return True
         
         # ВСЕ остальные случаи - свободный диалог
@@ -97,6 +88,7 @@ class SmartIntentManager:
 
 # --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
 
+# --- ЗАГРУЗКА КОНФИГУРАЦИИ ---
 def load_config():
     """Загружает конфигурацию из файла config.json."""
     try:
@@ -129,6 +121,103 @@ else:
     logger.error("!!! Приложение запускается с значениями по умолчанию из-за ошибки загрузки config.json")
     EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES, CUSTOMS_RATES, CUSTOMS_FEES, GREETINGS, PRODUCT_CATEGORIES = 550, {}, {}, {}, {}, {}, [], {}
 
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С КОНФИГОМ ---
+
+def find_product_category(text, product_categories):
+    """
+    Находит категорию товара по тексту
+    """
+    if not text:
+        return None
+        
+    text_lower = text.lower().strip()
+    
+    for category, data in product_categories.items():
+        for keyword in data["keywords"]:
+            if keyword in text_lower:
+                return category
+    
+    return None
+
+def find_destination_zone(city_name, destination_zones):
+    """
+    Находит зону назначения по названию города
+    """
+    city_lower = city_name.lower().strip()
+    
+    # Прямой поиск
+    if city_lower in destination_zones:
+        return destination_zones[city_lower]
+    
+    # Поиск с учетом возможных опечаток
+    for city, zone in destination_zones.items():
+        if city in city_lower or city_lower in city:
+            return zone
+    
+    return None
+
+def calculate_shipping_cost(category, weight, volume, destination_city):
+    """
+    Полный расчет стоимости доставки
+    """
+    # Определяем зону
+    zone = find_destination_zone(destination_city, DESTINATION_ZONES)
+    if not zone:
+        return "Город не найден"
+    
+    # Определяем тарифы для категории
+    category_rates = T1_RATES_DENSITY.get(category)
+    if not category_rates:
+        return "Категория не найдена"
+    
+    # Расчет плотности и выбор тарифа
+    density = weight / volume if volume > 0 else 0
+    
+    # Логика выбора тарифа по плотности
+    selected_rate = None
+    for rate in category_rates:
+        if density >= rate["min_density"]:
+            selected_rate = rate
+            break
+    
+    if not selected_rate:
+        return "Не удалось подобрать тариф"
+    
+    # Расчет стоимости Т1
+    if selected_rate["unit"] == "kg":
+        t1_cost_usd = weight * selected_rate["price"]
+    else:  # m3
+        t1_cost_usd = volume * selected_rate["price"]
+    
+    t1_cost_kzt = t1_cost_usd * EXCHANGE_RATE
+    
+    # Расчет стоимости Т2
+    city_lower = destination_city.lower()
+    if city_lower == "алматы" or city_lower == "алмата":
+        t2_rate = T2_RATES.get("алматы", 120)
+        zone_name = "алматы"
+    else:
+        t2_rate = T2_RATES.get(str(zone), 250)
+        zone_name = f"зона {zone}"
+    
+    t2_cost_kzt = weight * t2_rate
+    
+    # Итоговая стоимость с комиссией 20%
+    total_cost = (t1_cost_kzt + t2_cost_kzt) * 1.20
+    
+    return {
+        't1_cost': t1_cost_kzt,
+        't2_cost': t2_cost_kzt,
+        'total': total_cost,
+        'zone': zone_name,
+        't2_rate': t2_rate,
+        'volume': volume,
+        'density': density,
+        'rule': selected_rate,
+        't1_cost_usd': t1_cost_usd,
+        'category': category
+    }
+
 # --- ЗАГРУЗКА ПРОМПТА ЛИЧНОСТИ ---
 def load_personality_prompt():
     """Загружает промпт личности из файла personality_prompt.txt."""
@@ -145,7 +234,7 @@ PERSONALITY_PROMPT = load_personality_prompt()
 
 # --- СИСТЕМНЫЙ ПРОМПТ ---
 SYSTEM_INSTRUCTION = """
-Ты — умный ассистент компании PostPro. Твоя главная цель — помочь клиенту рассчитать стоимость доставки и оформить заявку.
+Ты — умный ассистент компании PostPro. Твоя главная цель — помочь клиенту рассчитать стоимость доставки и оформировать заявку.
 
 ***ВАЖНЫЕ ПРАВИЛА:***
 
@@ -192,6 +281,262 @@ try:
         logger.error("!!! API ключ не найден")
 except Exception as e:
     logger.error(f"!!! Ошибка инициализации Gemini: {e}")
+
+# --- ФУНКЦИИ РАСЧЕТА ---
+def extract_dimensions(text):
+    """Извлекает габариты (длина, ширина, высота) из текста в любом формате."""
+    patterns = [
+        r'(?:габарит\w*|размер\w*|дшв|длш|разм)?\s*'
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?\s*'
+        r'[xх*×на\s\-]+\s*'
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?\s*'
+        r'[xх*×на\s\-]+\s*'
+        r'(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m|сантиметр\w*|метр\w*)?'
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in patterns:
+        matches = re.finditer(pattern, text_lower)
+        for match in matches:
+            try:
+                l = float(match.group(1).replace(',', '.'))
+                w = float(match.group(2).replace(',', '.'))
+                h = float(match.group(3).replace(',', '.'))
+                
+                match_text = match.group(0).lower()
+                has_explicit_cm = any(word in match_text for word in ['см', 'cm', 'сантим'])
+                has_explicit_m = any(word in match_text for word in ['м', 'm', 'метр'])
+                
+                is_cm = (
+                    has_explicit_cm or
+                    (l > 5 or w > 5 or h > 5) and not has_explicit_m
+                )
+                
+                if is_cm:
+                    l = l / 100
+                    w = w / 100
+                    h = h / 100
+                
+                logger.info(f"Извлечены габариты: {l:.3f}x{w:.3f}x{h:.3f} м")
+                return l, w, h
+                
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Ошибка преобразования габаритов: {e}")
+                continue
+    
+    pattern_dl_sh_v = r'(?:длин[аы]?|length)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:ширин[аы]?|width)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?\s*(?:высот[аы]?|height)\s*(\d+(?:[.,]\d+)?)\s*(?:см|cm|м|m)?'
+    
+    match = re.search(pattern_dl_sh_v, text_lower)
+    if match:
+        try:
+            l = float(match.group(1).replace(',', '.'))
+            w = float(match.group(2).replace(',', '.'))
+            h = float(match.group(3).replace(',', '.'))
+            
+            match_text = match.group(0).lower()
+            has_explicit_cm = any(word in match_text for word in ['см', 'cm', 'сантим'])
+            has_explicit_m = any(word in match_text for word in ['м', 'm', 'метр'])
+            
+            is_cm = (
+                has_explicit_cm or
+                (l > 5 or w > 5 or h > 5) and not has_explicit_m
+            )
+            
+            if is_cm:
+                l = l / 100
+                w = w / 100
+                h = h / 100
+            
+            logger.info(f"Извлечены габариты (формат дшв): {l:.3f}x{w:.3f}x{h:.3f} м")
+            return l, w, h
+            
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Ошибка преобразования габаритов дшв: {e}")
+    
+    pattern_three_numbers = r'(?<!\d)(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)(?!\d)'
+    
+    match = re.search(pattern_three_numbers, text_lower)
+    if match:
+        try:
+            l = float(match.group(1).replace(',', '.'))
+            w = float(match.group(2).replace(',', '.'))
+            h = float(match.group(3).replace(',', '.'))
+            
+            if l > 5 and w > 5 and h > 5:
+                l = l / 100
+                w = w / 100
+                h = h / 100
+            
+            logger.info(f"Извлечены габариты (три числа): {l:.3f}x{w:.3f}x{h:.3f} м")
+            return l, w, h
+            
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Ошибка преобразования трех чисел: {e}")
+    
+    return None, None, None
+
+def extract_volume(text):
+    """Извлекает готовый объем из текста в любом формате."""
+    patterns = [
+        r'(\d+(?:[.,]\d+)?)\s*(?:куб\.?\s*м|м³|м3|куб\.?|кубическ\w+\s*метр\w*|кубометр\w*)',
+        r'(?:объем|volume)\w*\s*(\d+(?:[.,]\d+)?)\s*(?:куб\.?\s*м|м³|м3|куб\.?)?',
+        r'(\d+(?:[.,]\d+)?)\s*(?:cubic|cub)',
+        r'(\d+(?:[.,]\d+)?)\s*(?=куб|м³|м3|объем)'
+    ]
+    
+    text_lower = text.lower()
+    
+    for pattern in patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            try:
+                volume = float(match.group(1).replace(',', '.'))
+                logger.info(f"Извлечен объем: {volume} м³")
+                return volume
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Ошибка преобразования объема: {e}")
+                continue
+    
+    return None
+
+def get_t1_density_rule(product_type, weight, volume):
+    """Находит и возвращает правило тарифа Т1 на основе плотности груза."""
+    if not volume or volume <= 0:
+        return None, None
+
+    density = weight / volume
+    
+    # Используем новую функцию определения категории
+    category = find_product_category(product_type, PRODUCT_CATEGORIES)
+    if not category:
+        category = "мебель"  # категория по умолчанию
+    
+    rules = T1_RATES_DENSITY.get(category.lower())
+    if not rules:
+        rules = T1_RATES_DENSITY.get("мебель")
+    
+    # Проверка на наличие правил
+    if not rules:
+        return None, density
+
+    for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
+        if density >= rule['min_density']:
+            return rule, density
+            
+    return None, density
+
+def calculate_quick_cost(weight: float, product_type: str, city: str, volume: float = None):
+    """Быстрый расчет стоимости - единый центр всех расчетов"""
+    try:
+        rule, density = get_t1_density_rule(product_type, weight, volume)
+        if not rule:
+            return None
+        
+        price = rule['price']
+        unit = rule['unit']
+        
+        if unit == "kg":
+            cost_usd = price * weight
+        elif unit == "m3":
+            cost_usd = price * volume
+        else:
+            cost_usd = price * weight 
+        
+        t1_cost_kzt = cost_usd * EXCHANGE_RATE
+        
+        # Используем новую функцию определения зоны
+        zone = find_destination_zone(city, DESTINATION_ZONES)
+        if not zone:
+            return None
+            
+        city_lower = city.lower()
+        if city_lower == "алматы" or city_lower == "алмата":
+            t2_rate = T2_RATES.get("алматы", 120)
+            zone_name = "алматы"
+        else:
+            t2_rate = T2_RATES.get(str(zone), 250)
+            zone_name = f"зона {zone}"
+        
+        t2_cost_kzt = weight * t2_rate
+        
+        total_cost = (t1_cost_kzt + t2_cost_kzt) * 1.20
+        
+        return {
+            't1_cost': t1_cost_kzt,
+            't2_cost': t2_cost_kzt,
+            'total': total_cost,
+            'zone': zone_name,
+            't2_rate': t2_rate,
+            'volume': volume,
+            'density': density,
+            'rule': rule,
+            't1_cost_usd': cost_usd
+        }
+    except Exception as e:
+        logger.error(f"Ошибка расчета: {e}")
+        return None
+
+def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: str):
+    """Детальный расчет с разбивкой по плотности"""
+    if not quick_cost:
+        return "Ошибка расчета"
+    
+    t1_cost = quick_cost['t1_cost']
+    t2_cost = quick_cost['t2_cost'] 
+    total = quick_cost['total']
+    zone = quick_cost['zone']
+    t2_rate = quick_cost['t2_rate']
+    volume = quick_cost['volume']
+    density = quick_cost['density']
+    rule = quick_cost['rule']
+    t1_cost_usd = quick_cost['t1_cost_usd']
+    
+    price = rule['price']
+    unit = rule['unit']
+    if unit == "kg":
+        calculation_text = f"${price}/кг × {weight} кг = ${t1_cost_usd:.2f} USD"
+    elif unit == "m3":
+        calculation_text = f"${price}/м³ × {volume:.3f} м³ = ${t1_cost_usd:.2f} USD"
+    else:
+        calculation_text = f"${price}/кг × {weight} кг = ${t1_cost_usd:.2f} USD"
+    
+    city_name = city.capitalize()
+    if zone == "алматы":
+        t2_explanation = f"• Доставка по городу Алматы до вашего адреса"
+        zone_text = "город Алматы"
+        comparison_text = f"💡 **Если самовывоз со склада в Алматы:** {t1_cost:.0f} тенге"
+    else:
+        t2_explanation = f"• Доставка до вашего адреса в {city_name}"
+        zone_text = f"Зона {zone}"
+        comparison_text = f"💡 **Если самовывоз из Алматы:** {t1_cost:.0f} тенге"
+    
+    response = (
+        f"📊 **Детальный расчет для {weight} кг «{product_type}» в г. {city_name}:**\n\n"
+        
+        f"**Т1: Доставка из Китая до Алматы**\n"
+        f"• Плотность вашего груза: **{density:.1f} кг/м³**\n"
+        f"• Применен тариф Т1: **${price} за {unit}**\n"
+        f"• Расчет: {calculation_text}\n"
+        f"• По курсу {EXCHANGE_RATE} тенge/$ = **{t1_cost:.0f} тенge**\n\n"
+        
+        f"**Т2: Доставка до двери ({zone_text})**\n"
+        f"{t2_explanation}\n"
+        f"• {t2_rate} тенge/кг × {weight} кг = **{t2_cost:.0f} тенge**\n\n"
+        
+        f"**Комиссия компании (20%):**\n"
+        f"• ({t1_cost:.0f} + {t2_cost:.0f}) × 20% = **{(t1_cost + t2_cost) * 0.20:.0f} тенge**\n\n"
+        
+        f"------------------------------------\n"
+        f"💰 **ИТОГО с доставкой до двери:** ≈ **{total:,.0f} тенge**\n\n"
+        
+        f"{comparison_text}\n\n"
+        f"💡 **Страхование:** дополнительно 1% от стоимости груза\n"
+        f"💳 **Оплата:** пост-оплата при получении\n\n"
+        f"✅ **Оставить заявку?** Напишите ваше имя и телефон!\n"
+        f"🔄 **Новый расчет?** Напишите **Старт**"
+    )
+    return response
 
 def explain_tariffs():
     """Объяснение тарифов Т1 и Т2"""
@@ -269,6 +614,39 @@ def get_gemini_response(user_message, context=""):
         logger.error(f"Ошибка Gemini: {e}")
         return "Ой, кажется, у меня что-то пошло не так с креативной частью! Давайте лучше вернемся к расчету доставки, с этим я точно справлюсь. 😊"
 
+def extract_delivery_info(text):
+    """Извлечение данных о доставки"""
+    weight = None
+    product_type = None
+    city = None
+    
+    try:
+        weight_patterns = [
+            r'(\d+(?:\.\d+)?)\s*(?:кг|kg|килограмм|кило)',
+            r'вес\s*[:\-]?\s*(\d+(?:\.\d+)?)',
+        ]
+        
+        for pattern in weight_patterns:
+            match = re.search(pattern, text.lower())
+            if match:
+                weight = float(match.group(1))
+                break
+        
+        # Используем новую функцию определения города
+        text_lower = text.lower()
+        for city_name in DESTINATION_ZONES:
+            if city_name in text_lower:
+                city = city_name
+                break
+        
+        # Используем новую функцию определения категории товара
+        product_type = find_product_category(text, PRODUCT_CATEGORIES)
+        
+        return weight, product_type, city
+    except Exception as e:
+        logger.error(f"Ошибка извлечения данных: {e}")
+        return None, None, None
+
 def extract_contact_info(text):
     """Умное извлечение контактных данных"""
     name = None
@@ -342,10 +720,10 @@ def generate_delivery_response(message):
             return "📐 Укажите габариты (например: 1.2×0.8×0.5 м) или объем"
         
         # Производим расчет
-        quick_cost = calculate_quick_cost(weight, product_type, city, volume, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES)
+        quick_cost = calculate_quick_cost(weight, product_type, city, volume)
         
         if quick_cost:
-            return calculate_detailed_cost(quick_cost, weight, product_type, city, EXCHANGE_RATE)
+            return calculate_detailed_cost(quick_cost, weight, product_type, city)
         else:
             return "❌ Не удалось рассчитать стоимость. Проверьте данные."
             
@@ -366,10 +744,72 @@ def generate_free_response(message, intent_type=None):
         logger.error(f"Ошибка в generate_free_response: {e}")
         return "💬 Давайте поговорим о чем-то другом! Чем еще могу помочь?"
 # 🎯 КОНЕЦ_НОВЫХ_ФУНКЦИЙ
+    
+# ↓↓↓ ВСТАВИТЬ ЗДЕСЬ - основная функция обработки (версия с обработкой ошибок) ↓↓↓
+def handle_message_universal(user_id, message):
+    intent_manager = SmartIntentManager()
+    
+    try:
+        if intent_manager.should_switch_to_delivery(message):
+            response = generate_delivery_response(message)
+            return response
+        else:
+            intent_type = intent_manager.get_intent_type(message)
+            response = generate_free_response(message, intent_type)
+            return response
+    except NameError as e:
+        logger.error(f"Function not found: {e}")
+        return "⚠️ Системная ошибка: функции обработки не найдены"
+# ↑↑↑ КОНЕЦ ВСТАВКИ ФУНКЦИИ ↑↑↑
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Post Pro Bot</title>
+        <style>
+            body { 
+                font-family: Arial, sans-serif; 
+                max-width: 800px; 
+                margin: 0 auto; 
+                padding: 20px; 
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+            }
+            .container {
+                background: rgba(255,255,255,0.1);
+                padding: 30px;
+                border-radius: 15px;
+                backdrop-filter: blur(10px);
+            }
+            h1 { text-align: center; }
+            .status { 
+                background: #28a745; 
+                padding: 10px; 
+                border-radius: 5px; 
+                text-align: center;
+                margin: 20px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🤖 Post Pro Bot API</h1>
+            <div class="status">
+                ✅ Сервер работает корректно
+            </div>
+            <h3>Доступные эндпоинты:</h3>
+            <ul>
+                <li><strong>POST /chat</strong> - Основной чат с ботом</li>
+                <li><strong>GET /health</strong> - Проверка здоровья сервера</li>
+            </ul>
+            <p>Для тестирования используйте POST запросы на <code>/chat</code> endpoint.</p>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -391,11 +831,9 @@ def chat():
                 'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None},
                 'chat_history': [f"Клиент: {user_message}"],
                 'waiting_for_contacts': False,
-                'calculation_shown': False,
-                'multiple_calculation': None,
-                'quick_cost': None
+                'calculation_shown': False
             })
-            return jsonify({"response": "Привет! 👋 Я ассистент Post Pro. Помогу рассчитать доставку из Китая в Казахстан!\n\n📦 **Для расчета укажите параметры:**\n• **Вес груза** (в кг)\n• **Тип товара** (мебель, техника, одежда и т.д.)\n• **Габариты** (Д×Ш×В в метрах или сантиметрах)\n• **Город доставки**\n\n💡 **Примеры:**\n• Один товар: \"50 кг мебель в Астану, габариты 120×80×50\"\n• Несколько товаров: \"2 коробки по 10кг 30×30×30см, 3 пакета по 5кг 20×20×20см в Алматы\""})
+            return jsonify({"response": "Привет! 👋 Я ассистент Post Pro. Помогу рассчитать доставку из Китая в Казахстан!\n\n📦 **Для расчета укажите 4 параметра:**\n• **Вес груза** (в кг)\n• **Тип товара** (мебель, техника, одежда и т.д.)\n• **Габариты** (Д×Ш×В в метрах или сантиметрах)\n• **Город доставки**\n\n💡 **Пример:** \"50 кг мебель в Астану, габариты 120×80×50\""})
 
         # Обработка команды "Старт" для нового расчета
         if user_message.lower() in ['старт', 'start', 'новый расчет', 'сначала', 'новая заявка']:
@@ -403,11 +841,9 @@ def chat():
                 'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None},
                 'chat_history': [],
                 'waiting_for_contacts': False,
-                'calculation_shown': False,
-                'multiple_calculation': None,
-                'quick_cost': None
+                'calculation_shown': False
             })
-            return jsonify({"response": "🔄 Начинаем новый расчет!\n\n📦 **Для расчета укажите параметры:**\n• **Вес груза** (в кг)\n• **Тип товара** (мебель, техника, одежда и т.д.)\n• **Габариты** (Д×Ш×В в метрах или сантиметрах)\n• **Город доставки**\n\n💡 **Примеры:**\n• Один товар: \"50 кг мебель в Астану, габариты 120×80×50\"\n• Несколько товаров: \"2 коробки по 10кг 30×30×30см, 3 пакета по 5кг 20×20×20см в Алматы\""})
+            return jsonify({"response": "🔄 Начинаем новый расчет!\n\n📦 **Для расчета укажите 4 параметра:**\n• **Вес груза** (в кг)\n• **Тип товара** (мебель, техника, одежда и т.д.)\n• **Габариты** (Д×Ш×В в метрах или сантиметрах)\n• **Город доставки**\n\n💡 **Пример:** \"50 кг мебель в Астану, габариты 120×80×50\""})
         
         # Если ждем контакты (после показа расчета)
         if waiting_for_contacts:
@@ -415,25 +851,14 @@ def chat():
             
             if name and phone:
                 details = f"Имя: {name}, Телефон: {phone}"
-                
-                # Для множественных товаров
-                if session.get('multiple_calculation'):
-                    multiple_calculation = session['multiple_calculation']
-                    details += f", Множественные товары:"
-                    for item in multiple_calculation['items']:
-                        details += f" {item['product_type']} ({item['quantity']} шт)"
-                    details += f", Общий вес: {multiple_calculation['totals']['total_weight']} кг"
+                if delivery_data['weight']:
+                    details += f", Вес: {delivery_data['weight']} кг"
+                if delivery_data['product_type']:
+                    details += f", Товар: {delivery_data['product_type']}"
+                if delivery_data['city']:
                     details += f", Город: {delivery_data['city']}"
-                # Для одиночных товаров
-                else:
-                    if delivery_data['weight']:
-                        details += f", Вес: {delivery_data['weight']} кг"
-                    if delivery_data['product_type']:
-                        details += f", Товар: {delivery_data['product_type']}"
-                    if delivery_data['city']:
-                        details += f", Город: {delivery_data['city']}"
-                    if delivery_data.get('volume'):
-                        details += f", Объем: {delivery_data['volume']:.3f} м³"
+                if delivery_data.get('volume'):
+                    details += f", Объем: {delivery_data['volume']:.3f} м³"
                 
                 save_application(details)
                 
@@ -441,9 +866,7 @@ def chat():
                     'delivery_data': {'weight': None, 'product_type': None, 'city': None, 'volume': None},
                     'chat_history': [],
                     'waiting_for_contacts': False,
-                    'calculation_shown': False,
-                    'multiple_calculation': None,
-                    'quick_cost': None
+                    'calculation_shown': False
                 })
                 
                 return jsonify({"response": "🎉 Спасибо, что выбрали Post Pro! Менеджер свяжется с вами в течение 15 минут. 📞"})
@@ -480,93 +903,48 @@ def chat():
         if any(word in user_message.lower() for word in ['на каком ии', 'какой ии', 'технология']):
             return jsonify({"response": "Я работаю на базе Post Pro ИИ! 🚀"})
         
-        # Извлечение данных о доставке (обновленная версия с поддержкой множественных товаров)
-        delivery_info = extract_delivery_info(user_message, DESTINATION_ZONES, PRODUCT_CATEGORIES)
-
-        # Проверяем, есть ли множественные товары
-        if delivery_info.get('multiple_items', False):
-            # Обрабатываем множественные товары
-            items = delivery_info['items']
-            city = delivery_info['city']
-            
-            if items and city:
-                # Расчет для множественных товаров
-                multiple_calculation = calculate_multiple_items(
-                    items, city, EXCHANGE_RATE, DESTINATION_ZONES, T1_RATES_DENSITY, T2_RATES
-                )
-                
-                if multiple_calculation:
-                    # Сохраняем результат расчета в сессии
-                    session['multiple_calculation'] = multiple_calculation
-                    session['calculation_shown'] = True
-                    session['waiting_for_contacts'] = True
-                    session['delivery_data'] = {
-                        'weight': multiple_calculation['totals']['total_weight'],
-                        'product_type': "разные товары",
-                        'city': city,
-                        'volume': multiple_calculation['totals']['total_volume']
-                    }
-                    
-                    # Показываем детальный расчет для множественных товаров
-                    response_message = format_multiple_items_response(multiple_calculation, city)
-                    session['chat_history'] = chat_history
-                    return jsonify({"response": response_message})
-                else:
-                    return jsonify({"response": "❌ Не удалось рассчитать стоимость для вашего заказа. Проверьте данные."})
-            
-            # Если не хватает данных для множественных товаров
-            if not city:
-                return jsonify({"response": "🏙️ Укажите город доставки (Алматы, Астана и т.д.)"})
-            if not items:
-                return jsonify({"response": "📦 Не удалось распознать товары. Укажите в формате: '5 коробок вещей 45×40×40 по 40 кг'"})
-
-        # Продолжаем старую логику для одиночных товаров
-        weight = delivery_info.get('weight')
-        product_type = delivery_info.get('product_type')
-        city = delivery_info.get('city')
-
+        # Извлечение данных о доставке
+        weight, product_type, city = extract_delivery_info(user_message)
         length, width, height = extract_dimensions(user_message)
         volume_direct = extract_volume(user_message)
 
         data_updated = False
         confirmation_parts = []
 
-        # Только для одиночных товаров (не множественных)
-        if not delivery_info.get('multiple_items', False):
-            if weight and weight != delivery_data['weight']:
-                delivery_data['weight'] = weight
-                data_updated = True
-                confirmation_parts.append(f"📊 **Вес:** {weight} кг")
+        if weight and weight != delivery_data['weight']:
+            delivery_data['weight'] = weight
+            data_updated = True
+            confirmation_parts.append(f"📊 **Вес:** {weight} кг")
 
-            if product_type and product_type != delivery_data['product_type']:
-                delivery_data['product_type'] = product_type
-                data_updated = True
-                confirmation_parts.append(f"📦 **Товар:** {product_type}")
+        if product_type and product_type != delivery_data['product_type']:
+            delivery_data['product_type'] = product_type
+            data_updated = True
+            confirmation_parts.append(f"📦 **Товар:** {product_type}")
 
-            if city and city != delivery_data['city']:
-                delivery_data['city'] = city
-                data_updated = True
-                confirmation_parts.append(f"🏙️ **Город:** {city.capitalize()}")
+        if city and city != delivery_data['city']:
+            delivery_data['city'] = city
+            data_updated = True
+            confirmation_parts.append(f"🏙️ **Город:** {city.capitalize()}")
 
-            # Обработка габаритов и объема (объем имеет приоритет)
-            if volume_direct and volume_direct != delivery_data.get('volume'):
-                delivery_data['volume'] = volume_direct
-                delivery_data['length'] = None
-                delivery_data['width'] = None
-                delivery_data['height'] = None
+        # Обработка габаритов и объема (объем имеет приоритет)
+        if volume_direct and volume_direct != delivery_data.get('volume'):
+            delivery_data['volume'] = volume_direct
+            delivery_data['length'] = None
+            delivery_data['width'] = None
+            delivery_data['height'] = None
+            data_updated = True
+            confirmation_parts.append(f"📏 **Объем:** {volume_direct:.3f} м³")
+        elif length and width and height:
+            calculated_volume = length * width * height
+            current_volume = delivery_data.get('volume')
+            if current_volume is None or abs(calculated_volume - current_volume) > 0.001:
+                delivery_data['length'] = length
+                delivery_data['width'] = width
+                delivery_data['height'] = height
+                delivery_data['volume'] = calculated_volume
                 data_updated = True
-                confirmation_parts.append(f"📏 **Объем:** {volume_direct:.3f} м³")
-            elif length and width and height:
-                calculated_volume = length * width * height
-                current_volume = delivery_data.get('volume')
-                if current_volume is None or abs(calculated_volume - current_volume) > 0.001:
-                    delivery_data['length'] = length
-                    delivery_data['width'] = width
-                    delivery_data['height'] = height
-                    delivery_data['volume'] = calculated_volume
-                    data_updated = True
-                    confirmation_parts.append(f"📐 **Габариты:** {length:.2f}×{width:.2f}×{height:.2f} м")
-                    confirmation_parts.append(f"📏 **Объем:** {calculated_volume:.3f} м³")
+                confirmation_parts.append(f"📐 **Габариты:** {length:.2f}×{width:.2f}×{height:.2f} м")
+                confirmation_parts.append(f"📏 **Объем:** {calculated_volume:.3f} м³")
         
         # Если данные обновлены, показываем подтверждение
         if data_updated and not calculation_shown:
@@ -631,33 +1009,24 @@ def chat():
                 session['delivery_data'] = delivery_data
                 session['chat_history'] = chat_history
                 return jsonify({"response": response_message})
-
-                # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
-if has_all_data and not calculation_shown:
-    # 🔥 ИСПРАВЛЕННЫЙ ВЫЗОВ - для одиночных товаров
-    quick_cost = calculate_quick_cost( 
-        # Производим расчет
-        delivery_data['weight'],
-        delivery_data['product_type'],
-        delivery_data['city'],
-        delivery_data.get('volume'),
-        EXCHANGE_RATE,
-        DESTINATION_ZONES,
-        T1_RATES_DENSITY,  # ✅ ПРАВИЛЬНО: T1_RATES_DENSITY
-        T2_RATES           # ✅ ПРАВИЛЬНО: T2_RATES
-    )
-    
-    if quick_cost:
-        # Сразу показываем детальный расчет вместо вопроса
-        detailed_response = calculate_detailed_cost(
-            quick_cost,
-            delivery_data['weight'], 
-            delivery_data['product_type'], 
-            delivery_data['city'],
-            EXCHANGE_RATE
-        )
         
-        # Сохраняем результат расчета в сессии
+        # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
+        if has_all_data and not calculation_shown:
+            # Производим расчет
+            quick_cost = calculate_quick_cost(
+                delivery_data['weight'], 
+                delivery_data['product_type'], 
+                delivery_data['city'],
+                delivery_data.get('volume')
+            )
+            
+            if quick_cost:
+                # Сразу показываем детальный расчет вместо вопроса
+                detailed_response = calculate_detailed_cost(
+                    quick_cost,
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city']
                 )
                 
                 # Сохраняем результат расчета в сессии
@@ -673,42 +1042,23 @@ if has_all_data and not calculation_shown:
         
         # Обработка после показа расчета
         if calculation_shown:
-            # Для множественных товаров
-            if session.get('multiple_calculation'):
-                # Запрос детального расчета
-                if any(word in user_message.lower() for word in ['детальн', 'подробн', 'разбей', 'тариф', 'да', 'yes', 'конечно']):
-                    multiple_calculation = session.get('multiple_calculation')
-                    detailed_response = format_multiple_items_response(multiple_calculation, delivery_data['city'])
-                    session['waiting_for_contacts'] = True
-                    session['chat_history'] = chat_history
-                    return jsonify({"response": detailed_response})
-                
-                # Запрос на оформление заявки
-                if any(word in user_message.lower() for word in ['заявк', 'оставь', 'свяж', 'контакт', 'позвон', 'менеджер', 'дальше', 'продолж']):
-                    session['waiting_for_contacts'] = True
-                    session['chat_history'] = chat_history
-                    return jsonify({"response": "Отлично! Для связи укажите:\n• Ваше имя\n• Номер телефона\n\nНапример: 'Аслан, 87001234567'"})
+            # Запрос детального расчета
+            if any(word in user_message.lower() for word in ['детальн', 'подробн', 'разбей', 'тариф', 'да', 'yes', 'конечно']):
+                detailed_response = calculate_detailed_cost(
+                    session.get('quick_cost'),
+                    delivery_data['weight'], 
+                    delivery_data['product_type'], 
+                    delivery_data['city']
+                )
+                session['waiting_for_contacts'] = True
+                session['chat_history'] = chat_history
+                return jsonify({"response": detailed_response})
             
-            # Старая логика для одиночных товаров
-            else:
-                # Запрос детального расчета
-                if any(word in user_message.lower() for word in ['детальн', 'подробн', 'разбей', 'тариф', 'да', 'yes', 'конечно']):
-                    detailed_response = calculate_detailed_cost(
-                        session.get('quick_cost'),
-                        delivery_data['weight'], 
-                        delivery_data['product_type'], 
-                        delivery_data['city'],
-                        EXCHANGE_RATE
-                    )
-                    session['waiting_for_contacts'] = True
-                    session['chat_history'] = chat_history
-                    return jsonify({"response": detailed_response})
-                
-                # Запрос на оформление заявки
-                if any(word in user_message.lower() for word in ['заявк', 'оставь', 'свяж', 'контакт', 'позвон', 'менеджер', 'дальше', 'продолж']):
-                    session['waiting_for_contacts'] = True
-                    session['chat_history'] = chat_history
-                    return jsonify({"response": "Отлично! Для связи укажите:\n• Ваше имя\n• Номер телефона\n\nНапример: 'Аслан, 87001234567'"})
+            # Запрос на оформление заявки
+            if any(word in user_message.lower() for word in ['заявк', 'оставь', 'свяж', 'контакт', 'позвон', 'менеджер', 'дальше', 'продолж']):
+                session['waiting_for_contacts'] = True
+                session['chat_history'] = chat_history
+                return jsonify({"response": "Отлично! Для связи укажите:\n• Ваше имя\n• Номер телефона\n\nНапример: 'Аслан, 87001234567'"})
         
         # Обработка общих вопросов через Gemini (fallback)
         context_lines = []
@@ -728,8 +1078,6 @@ if has_all_data and not calculation_shown:
             context_lines.append(f"- Объем: {delivery_data['volume']:.3f} м³")
         if calculation_shown:
             context_lines.append(f"- Расчет показан: Да")
-        if session.get('multiple_calculation'):
-            context_lines.append(f"- Множественные товары: Да")
         
         context = "\n".join(context_lines)
         bot_response = get_gemini_response(user_message, context)
@@ -755,6 +1103,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
-
-
 
