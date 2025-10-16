@@ -1025,31 +1025,7 @@ def chat():
             delivery_data.get('volume')
         )
         
-        # Пошаговый сбор данных
-        if not has_all_data and not calculation_shown and not data_updated:
-            missing_data = []
-            if not delivery_data['weight']:
-                missing_data.append("вес груза (в кг)")
-            if not delivery_data['product_type']:
-                missing_data.append("тип товара")
-            if not delivery_data.get('volume'):
-                missing_data.append("габариты (Д×Ш×В в метрах или сантиметрах)")
-            if not delivery_data['city']:
-                missing_data.append("город доставки")
             
-            if missing_data:
-                response_message = "📝 Для расчета укажите: " + ", ".join(missing_data)
-                
-                # Конкретные подсказки
-                if not delivery_data.get('volume') and delivery_data['weight']:
-                    response_message += "\n\n💡 **Пример габаритов:** \"1.2×0.8×0.5\" или \"120×80×50\""
-                elif not delivery_data['weight'] and delivery_data.get('volume'):
-                    response_message += "\n\n💡 **Пример веса:** \"50 кг\" или \"вес 50\""
-                
-                session['delivery_data'] = delivery_data
-                session['chat_history'] = chat_history
-                return jsonify({"response": response_message})
-        
         # ТРИГГЕР РАСЧЕТА - когда все данные собраны и расчет еще не показан
         if has_all_data and not calculation_shown:
             # Производим расчет
@@ -1178,6 +1154,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
