@@ -14,7 +14,11 @@
         
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #e6f0e6 0%, #f0f8f0 50%, #e6f0e6 100%);
+            background: 
+                /* Темная плашка как в photo_5442628831925109744_y.jpg */
+                linear-gradient(to bottom, #1a535c 60px, transparent 60px),
+                /* Светло-зеленый фон с паттерном WhatsApp */
+                linear-gradient(135deg, #e6f0e6 0%, #f0f8f0 50%, #e6f0e6 100%);
             color: #3b4a54;
             min-height: 100vh;
             display: flex;
@@ -41,27 +45,22 @@
         .header {
             padding: 16px 20px;
             border-bottom: 1px solid #e0e0e0;
-            background: #f0f0f0;
-            color: #3b4a54;
+            background: #1a535c; /* Темно-бирюзовый из photo_5442628831925109744_y.jpg */
+            color: white;
             flex-shrink: 0;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             position: relative;
         }
         
-        .header::before {
-            content: "🚚";
-            position: absolute;
-            left: 20px;
-            font-size: 1.2rem;
-        }
-        
         .header-text h1 {
-            font-size: 1rem;
+            font-family: 'Cambria', 'Times New Roman', serif;
+            font-size: 1.1rem;
             font-weight: 600;
-            color: #3b4a54;
+            color: white;
             line-height: 1.2;
+            margin-left: 0;
         }
         
         .chat-messages {
@@ -250,6 +249,10 @@
                 padding: 14px 16px;
             }
             
+            .header-text h1 {
+                font-size: 1rem;
+            }
+            
             .chat-messages {
                 padding: 12px;
             }
@@ -280,7 +283,7 @@
     <div class="chat-container">
         <div class="header">
             <div class="header-text">
-                <h1>POST PRO Assistant</h1>
+                <h1>POST PRO Ai Assistant</h1>
             </div>
         </div>
         
