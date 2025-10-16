@@ -243,7 +243,7 @@ def find_destination_zone(city_name, destination_zones):
     return None
 
 def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
-    """Находит и возвращает правило тарифа Т1 на осFнове плотности груза."""
+    """Находит и возвращает правило тарифа Т1 на основе плотности груза."""
     if not volume or volume <= 0:
         return None, None
 
@@ -264,14 +264,19 @@ def get_t1_density_rule(product_type, weight, volume, T1_RATES_DENSITY):
         rules = T1_RATES_DENSITY.get("общие")
         logger.warning(f"Правила для категории '{category}' не найдены, используются 'общие'")
     
-    # Проверка на наличие правил
-    if not rules:
+    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем что rules - это список
+    if not rules or not isinstance(rules, list):
+        logger.error(f"Правила для категории '{category}' не найдены или неверного типа: {type(rules)}")
         return None, density
 
-# 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ДОБАВЛЕН ВОЗВРАТ ЗНАЧЕНИЯ!
-    for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
-        if density >= rule['min_density']:
-            return rule, density
+    # 🔥 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: ДОБАВЛЕН ВОЗВРАТ ЗНАЧЕНИЯ!
+    try:
+        for rule in sorted(rules, key=lambda x: x['min_density'], reverse=True):
+            if density >= rule['min_density']:
+                return rule, density
+    except (KeyError, TypeError) as e:
+        logger.error(f"Ошибка сортировки правил: {e}, rules: {rules}")
+        return None, density
             
     return None, density
 
