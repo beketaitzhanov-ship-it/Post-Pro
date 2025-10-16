@@ -113,6 +113,7 @@ if config:
     DESTINATION_ZONES = config.get("DESTINATION_ZONES", {})
     T1_RATES_DENSITY = config.get("T1_RATES_DENSITY", {})
     T2_RATES = config.get("T2_RATES", {})
+    T2_RATES_DETAILED = config.get("T2_RATES_DETAILED", {})
     CUSTOMS_RATES = config.get("CUSTOMS_RATES", {})
     CUSTOMS_FEES = config.get("CUSTOMS_FEES", {})
     GREETINGS = config.get("GREETINGS", [])
@@ -1091,6 +1092,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
