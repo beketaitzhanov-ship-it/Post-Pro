@@ -538,7 +538,7 @@ def calculate_detailed_cost(quick_cost, weight: float, product_type: str, city: 
     if zone == "алматы":
         t2_explanation = f"• Доставка по городу Алматы до вашего адреса"
         zone_text = "город Алматы"
-        comparison_text = f"💡 **Если самовывоз со склада в Алматы:** {t1_cost:.0f} тенге"
+        comparison_text = f"💡 **Если самовывоз со склада в Алматы:** {t1_cost * 1.20:.0f} тенге (включая комиссию 20%)"
     else:
         t2_explanation = f"• Доставка до вашего адреса в {city_name}"
         zone_text = f"Зона {zone}"
@@ -1091,6 +1091,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
