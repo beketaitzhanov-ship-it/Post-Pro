@@ -15,10 +15,8 @@
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
             background: 
-                /* Темная плашка как в photo_5442628831925109744_y.jpg */
                 linear-gradient(to bottom, #1a535c 60px, transparent 60px),
-                /* Светло-зеленый фон с паттерном WhatsApp */
-                linear-gradient(135deg, #e6f0e6 0%, #f0f8f0 50%, #e6f0e6 100%);
+                url('/templates/photo_5440601916599047426_y.jpg') center/cover no-repeat;
             color: #3b4a54;
             min-height: 100vh;
             display: flex;
@@ -45,7 +43,7 @@
         .header {
             padding: 16px 20px;
             border-bottom: 1px solid #e0e0e0;
-            background: #1a535c; /* Темно-бирюзовый из photo_5442628831925109744_y.jpg */
+            background: #1a535c;
             color: white;
             flex-shrink: 0;
             display: flex;
@@ -212,7 +210,6 @@
             line-height: 1.4;
         }
         
-        /* Стили для скроллбара */
         .chat-messages::-webkit-scrollbar {
             width: 6px;
         }
@@ -231,7 +228,6 @@
             background: #a8a8a8;
         }
 
-        /* Мобильная адаптация */
         @media (max-width: 768px) {
             body {
                 padding: 0;
@@ -329,7 +325,6 @@ Cклады: в Гуанчжоу и в ИУ
         const sendButton = document.getElementById('send-button');
         const chatMessages = document.getElementById('chat-messages');
 
-        // Автоматическое увеличение высоты textarea
         messageInput.addEventListener('input', function() {
             this.style.height = 'auto';
             this.style.height = Math.min(this.scrollHeight, 120) + 'px';
@@ -412,7 +407,6 @@ Cклады: в Гуанчжоу и в ИУ
             }
         }
 
-        // Обработчики событий
         sendButton.addEventListener('click', sendMessage);
         
         messageInput.addEventListener('keydown', function(e) {
@@ -422,10 +416,8 @@ Cклады: в Гуанчжоу и в ИУ
             }
         });
 
-        // Фокус на поле ввода при загрузке
         messageInput.focus();
 
-        // Гарантируем что поле ввода видно при загрузке
         setTimeout(() => {
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }, 100);
