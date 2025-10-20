@@ -8,6 +8,22 @@ from google.generativeai.types import GenerationConfig
 from dotenv import load_dotenv
 import logging
 
+def load_track_numbers():
+    """
+    Загружает трек-номера из файла
+    """
+    try:
+        with open('data/test_track_numbers.txt', 'r', encoding='utf-8') as f:
+            track_numbers = [line.strip() for line in f.readlines() if line.strip()]
+        print(f"✅ Загружено {len(track_numbers)} трек-номеров")
+        return track_numbers
+    except FileNotFoundError:
+        print("❌ Файл с трек-номерами не найден")
+        return []
+
+# Загружаем трек-номера при старте приложения
+track_numbers = load_track_numbers()
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1158,6 +1174,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
 
 
 
