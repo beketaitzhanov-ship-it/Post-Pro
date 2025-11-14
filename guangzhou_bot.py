@@ -14,7 +14,7 @@ TOKEN = os.getenv('GUANGZHOU_BOT_TOKEN')
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 # 👇 ВСТАВЬ СЮДА НОВУЮ ССЫЛКУ ИЗ MAKE (Сценарий 3)
-MAKE_WAREHOUSE_WEBHOOK = "https://hook.eu1.make.com/твоя_новая_ссылка_для_склада"
+MAKE_WAREHOUSE_WEBHOOK = "https://hook.eu1.make.com/qjsepifbths7ek1hkv91cdid7kt4xjqx"
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
