@@ -298,6 +298,7 @@ class GuangzhouBot:
                 WAITING_PRODUCT: [MessageHandler(filters.TEXT, self.get_product)],
                 WAITING_WEIGHT: [MessageHandler(filters.TEXT, self.get_weight)],
                 WAITING_VOLUME: [MessageHandler(filters.TEXT, self.get_volume)],
+                
                 WAITING_PHONE: [MessageHandler(filters.TEXT, self.get_phone_and_save)],
             },
             fallbacks=[CommandHandler('cancel', self.cancel)]
